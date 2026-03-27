@@ -3,17 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="SpelTeller is een vrolijke score-app voor Flip7 en andere bord- en kaartspellen."
-    />
     <meta name="theme-color" content="#ff6b00" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="SpelTeller" />
-    <meta name="application-name" content="SpelTeller" />
-    <meta name="format-detection" content="telephone=no" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon-192.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icons/icon-192.svg" />
@@ -37,10 +27,7 @@
     <header class="hero">
       <h1>SpelTeller</h1>
       <p>Houd scores bij voor Flip7 en al jullie andere spelletjes.</p>
-      <div class="hero-actions">
-        <button id="installBtn" class="ghost-btn" hidden>Installeer App</button>
-        <p id="pwaStatus" class="pwa-status" aria-live="polite" hidden></p>
-      </div>
+      <button id="installBtn" class="ghost-btn" hidden>Installeer App</button>
     </header>
 
     <main class="app-shell">
@@ -60,26 +47,11 @@
             </label>
             <label>
               Foto (optioneel)
-              <div class="file-input-wrapper">
-                <input id="playerPhoto" type="file" accept="image/*" />
-                <button id="clearPlayerPhoto" type="button" class="ghost-btn tiny" title="Foto verwijderen">✕</button>
-              </div>
-            </label>
-            <label class="color-label">
-              Kleur
-              <input id="playerColor" type="color" value="#ff6b00" />
+              <input id="playerPhoto" type="file" accept="image/*" />
             </label>
             <button type="submit">Speler Toevoegen</button>
           </form>
           <ul id="playerList" class="player-list"></ul>
-          <div class="leaderboard-wrap">
-            <div class="inline-head">
-              <h3>Win Ranking</h3>
-              <button id="resetRankingBtn" type="button" class="ghost-btn tiny">Ranking Opnieuw Tellen</button>
-            </div>
-            <p id="winRankingHint" class="muted">Nog geen afgeronde spellen met een winnaar.</p>
-            <ul id="winRanking" class="leaderboard" hidden></ul>
-          </div>
         </section>
       </section>
 
@@ -94,10 +66,6 @@
             <label>
               Kies spelers voor dit spel
               <div id="gamePlayers" class="checkbox-grid"></div>
-            </label>
-            <label>
-              Winscore (optioneel)
-              <input id="gameWinScore" type="number" min="1" placeholder="Bijv. 200" />
             </label>
             <button type="submit">Start Spel</button>
           </form>
@@ -120,11 +88,16 @@
             <p id="activeGameMeta" class="muted"></p>
             <div class="inline-actions">
               <button id="newGameBtn" type="button">Nieuw Spel</button>
+              <button id="switchGameBtn" type="button" class="ghost-btn">Wissel Spel</button>
               <button id="deleteGameBtn" type="button" class="ghost-btn">Verwijder Spel</button>
             </div>
           </div>
 
           <form id="roundForm" class="stack" hidden>
+            <label>
+              Ronde titel
+              <input id="roundLabel" type="text" maxlength="32" placeholder="Ronde 1" />
+            </label>
             <div id="roundScores" class="score-grid"></div>
             <button type="submit">Ronde Opslaan</button>
           </form>
@@ -145,35 +118,6 @@
         </section>
       </section>
     </main>
-
-    <dialog id="editPlayerDialog">
-      <form id="editPlayerForm" class="stack">
-        <h3>Speler bewerken</h3>
-        <label>
-          Naam
-          <input id="editPlayerName" type="text" required maxlength="24" />
-        </label>
-        <label>
-          Foto (optioneel — laat leeg om te behouden)
-          <div class="file-input-wrapper">
-            <input id="editPlayerPhoto" type="file" accept="image/*" />
-            <button id="clearEditPlayerPhoto" type="button" class="ghost-btn tiny" title="Foto verwijderen">✕</button>
-          </div>
-        </label>
-        <label class="color-label">
-          Kleur
-          <input id="editPlayerColor" type="color" />
-        </label>
-        <label id="removePhotoLabel" class="choice" hidden>
-          <input type="checkbox" id="editPlayerRemovePhoto" />
-          <span>Huidige foto verwijderen</span>
-        </label>
-        <div class="inline-actions">
-          <button type="submit">Opslaan</button>
-          <button type="button" id="editPlayerCancelBtn" class="ghost-btn">Annuleer</button>
-        </div>
-      </form>
-    </dialog>
 
     <dialog id="editRoundDialog">
       <form method="dialog" id="editRoundForm" class="stack">
@@ -209,14 +153,13 @@
       <li class="player-item">
         <img class="avatar" alt="" />
         <span class="name"></span>
-        <button class="ghost-btn tiny edit-btn" type="button">Bewerk</button>
-        <button class="danger-btn tiny remove-btn" type="button">Verwijder</button>
+        <button class="danger-btn tiny" type="button">Verwijder</button>
       </li>
     </template>
 
     <footer class="app-footer">
       <span>gemaakt door warenhuis willemsen</span>
-      <button id="footerPartyBtn" type="button" class="tiny">🎉 Feest</button>
+      <button id="footerPartyBtn" type="button" class="tiny">Feest (eindspel)</button>
     </footer>
 
     <script src="config.js"></script>
