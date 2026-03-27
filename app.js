@@ -6,31 +6,38 @@ const state = loadState();
 const cloud = loadCloudConfig();
 let deferredPrompt;
 let editingRoundId = null;
-let activeTab = state.activeGameId ? "score" : "players";
+let editingPlayerId = null;
+let activeTab = resolveInitialTab();
+let swRegistration = null;
 
 const els = {
   installBtn: document.getElementById("installBtn"),
+  pwaStatus: document.getElementById("pwaStatus"),
   footerPartyBtn: document.getElementById("footerPartyBtn"),
   tabButtons: document.querySelectorAll(".tab-btn"),
   tabPanels: document.querySelectorAll(".tab-panel"),
   playerForm: document.getElementById("playerForm"),
   playerName: document.getElementById("playerName"),
   playerPhoto: document.getElementById("playerPhoto"),
+  clearPlayerPhoto: document.getElementById("clearPlayerPhoto"),
+  playerColor: document.getElementById("playerColor"),
   playerList: document.getElementById("playerList"),
+  resetRankingBtn: document.getElementById("resetRankingBtn"),
+  winRanking: document.getElementById("winRanking"),
+  winRankingHint: document.getElementById("winRankingHint"),
   gameForm: document.getElementById("gameForm"),
   gameName: document.getElementById("gameName"),
   gamePlayers: document.getElementById("gamePlayers"),
+  gameWinScore: document.getElementById("gameWinScore"),
   activeGamePanel: document.getElementById("activeGamePanel"),
   activeGameTitle: document.getElementById("activeGameTitle"),
   activeGameMeta: document.getElementById("activeGameMeta"),
   newGameBtn: document.getElementById("newGameBtn"),
-  switchGameBtn: document.getElementById("switchGameBtn"),
   deleteGameBtn: document.getElementById("deleteGameBtn"),
   endGameBtn: document.getElementById("endGameBtn"),
   savedGamesList: document.getElementById("savedGamesList"),
   roundForm: document.getElementById("roundForm"),
   scoreTabHint: document.getElementById("scoreTabHint"),
-  roundLabel: document.getElementById("roundLabel"),
   roundScores: document.getElementById("roundScores"),
   leaderboardWrap: document.getElementById("leaderboardWrap"),
   leaderboard: document.getElementById("leaderboard"),
@@ -49,7 +56,16 @@ const els = {
   piggy: document.getElementById("piggy"),
   partyBear: document.getElementById("partyBear"),
   danceBanana: document.getElementById("danceBanana"),
-  playerTemplate: document.getElementById("playerTemplate")
+  playerTemplate: document.getElementById("playerTemplate"),
+  editPlayerDialog: document.getElementById("editPlayerDialog"),
+  editPlayerForm: document.getElementById("editPlayerForm"),
+  editPlayerName: document.getElementById("editPlayerName"),
+  editPlayerPhoto: document.getElementById("editPlayerPhoto"),
+  clearEditPlayerPhoto: document.getElementById("clearEditPlayerPhoto"),
+  editPlayerColor: document.getElementById("editPlayerColor"),
+  editPlayerRemovePhoto: document.getElementById("editPlayerRemovePhoto"),
+  removePhotoLabel: document.getElementById("removePhotoLabel"),
+  editPlayerCancelBtn: document.getElementById("editPlayerCancelBtn")
 };
 
 wireEvents();
@@ -62,10 +78,23 @@ function wireEvents() {
   }
 
   els.playerForm.addEventListener("submit", onCreatePlayer);
+  els.resetRankingBtn.addEventListener("click", onResetRanking);
+  els.clearPlayerPhoto.addEventListener("click", (e) => {
+    e.preventDefault();
+    els.playerPhoto.value = "";
+  });
+  els.editPlayerForm.addEventListener("submit", onSavePlayerEdit);
+  els.clearEditPlayerPhoto.addEventListener("click", (e) => {
+    e.preventDefault();
+    els.editPlayerPhoto.value = "";
+  });
+  els.editPlayerCancelBtn.addEventListener("click", () => {
+    editingPlayerId = null;
+    els.editPlayerDialog.close();
+  });
   els.gameForm.addEventListener("submit", onCreateGame);
   els.roundForm.addEventListener("submit", onAddRound);
   els.newGameBtn.addEventListener("click", onStartNewGame);
-  els.switchGameBtn.addEventListener("click", onSwitchGame);
   els.deleteGameBtn.addEventListener("click", onDeleteGame);
   els.endGameBtn.addEventListener("click", onEndGame);
   els.footerPartyBtn.addEventListener("click", onFooterParty);
@@ -74,7 +103,7 @@ function wireEvents() {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     deferredPrompt = event;
-    els.installBtn.hidden = false;
+    syncPwaStatus();
   });
 
   els.installBtn.addEventListener("click", async () => {
@@ -84,7 +113,20 @@ function wireEvents() {
     deferredPrompt.prompt();
     await deferredPrompt.userChoice;
     deferredPrompt = null;
-    els.installBtn.hidden = true;
+    syncPwaStatus();
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null;
+    syncPwaStatus("SpelTeller is geinstalleerd op dit apparaat.");
+  });
+
+  window.addEventListener("online", () => {
+    syncPwaStatus("Je bent weer online.");
+  });
+
+  window.addEventListener("offline", () => {
+    syncPwaStatus("Offline modus actief. Je lokale speldata blijft beschikbaar.");
   });
 }
 
@@ -105,7 +147,8 @@ async function onCreatePlayer(event) {
   state.players.push({
     id: crypto.randomUUID(),
     name,
-    photo
+    photo,
+    color: els.playerColor.value || "#ff6b00"
   });
 
   saveAndRender();
@@ -134,6 +177,7 @@ function onCreateGame(event) {
     id: crypto.randomUUID(),
     name,
     playerIds,
+    winScore: Number(els.gameWinScore.value) || null,
     rounds: [],
     endedAt: null,
     createdAt: new Date().toISOString()
@@ -153,7 +197,7 @@ function onAddRound(event) {
     return;
   }
 
-  const label = els.roundLabel.value.trim() || `Ronde ${game.rounds.length + 1}`;
+  const label = `Ronde ${game.rounds.length + 1}`;
   const scores = {};
 
   for (const input of els.roundScores.querySelectorAll("input")) {
@@ -166,21 +210,19 @@ function onAddRound(event) {
     scores
   });
 
-  saveAndRender();
-  els.roundForm.reset();
-}
-
-function onSwitchGame() {
-  const list = state.games.map((game, index) => `${index + 1}. ${game.name}`).join("\n");
-  const result = prompt(`Kies een spelnummer:\n${list}`);
-  const index = Number(result) - 1;
-  if (!Number.isInteger(index) || index < 0 || index >= state.games.length) {
-    return;
+  if (game.winScore) {
+    const totals = computeTotals(game);
+    const winEntry = Object.entries(totals).find(([, score]) => score >= game.winScore);
+    if (winEntry) {
+      game.endedAt = new Date().toISOString();
+      saveAndRender();
+      celebrateGame(game);
+      return;
+    }
   }
 
-  state.activeGameId = state.games[index].id;
   saveAndRender();
-  setActiveTab("score");
+  els.roundForm.reset();
 }
 
 function onStartNewGame() {
@@ -199,6 +241,15 @@ function onStartNewGame() {
 
   els.gameName.value = "";
   els.gameForm.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function onResetRanking() {
+  if (!confirm("De win ranking opnieuw vanaf nu laten tellen? Bestaande spelers en spellen blijven bewaard.")) {
+    return;
+  }
+
+  state.rankingResetAt = new Date().toISOString();
+  saveAndRender();
 }
 
 function onDeleteGame() {
@@ -226,10 +277,8 @@ function onEndGame() {
   }
 
   game.endedAt = new Date().toISOString();
-  state.activeGameId = null;
   saveAndRender();
   celebrateGame(game);
-  setActiveTab("new-game");
 }
 
 function onFooterParty() {
@@ -270,6 +319,7 @@ function onSaveRoundEdit(event) {
 function render() {
   renderTabs();
   renderPlayers();
+  renderWinRanking();
   renderGamePlayerSelectors();
   renderSavedGames();
   renderActiveGame();
@@ -288,6 +338,9 @@ function renderTabs() {
 
 function setActiveTab(tabName) {
   activeTab = tabName;
+  if (window.location.hash !== `#${tabName}`) {
+    history.replaceState(null, "", `#${tabName}`);
+  }
   renderTabs();
 }
 
@@ -459,11 +512,15 @@ function renderPlayers() {
     const item = node.querySelector("li");
     const avatar = node.querySelector(".avatar");
     const name = node.querySelector(".name");
-    const removeBtn = node.querySelector("button");
+    const editBtn = node.querySelector(".edit-btn");
+    const removeBtn = node.querySelector(".remove-btn");
 
-    avatar.src = player.photo || createAvatar(player.name);
+    avatar.src = player.photo || createAvatar(player.name, player.color);
     avatar.alt = player.name;
+    avatar.style.borderColor = player.color || "#ff6b00";
     name.textContent = player.name;
+
+    editBtn.addEventListener("click", () => onEditPlayer(player.id));
 
     removeBtn.addEventListener("click", () => {
       const hasOpenGames = state.games.some((game) => !game.endedAt && game.playerIds.includes(player.id));
@@ -478,6 +535,78 @@ function renderPlayers() {
     item.dataset.playerId = player.id;
     els.playerList.appendChild(node);
   }
+}
+
+function renderWinRanking() {
+  const ranking = computeWinRanking();
+  els.winRanking.innerHTML = "";
+
+  if (ranking.length === 0) {
+    els.winRanking.hidden = true;
+    els.winRankingHint.hidden = false;
+    return;
+  }
+
+  els.winRanking.hidden = false;
+  els.winRankingHint.hidden = true;
+
+  const medals = ["🥇", "🥈", "🥉"];
+
+  ranking.forEach((entry, index) => {
+    const li = document.createElement("li");
+    if (index === 0) {
+      li.classList.add("rank-1");
+    }
+
+    const sharedSuffix = entry.sharedWins > 0 ? `, ${entry.sharedWins} gedeeld` : "";
+    const rankBadge = medals[index] || `${index + 1}.`;
+    li.innerHTML = `<span class="rank-badge">${rankBadge}</span><span class="lb-name">${escapeHtml(
+      entry.name
+    )}</span><span class="lb-score">${entry.wins} winst${entry.wins === 1 ? "" : "en"}${sharedSuffix}</span>`;
+    els.winRanking.appendChild(li);
+  });
+}
+
+function onEditPlayer(playerId) {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return;
+  editingPlayerId = playerId;
+  els.editPlayerName.value = player.name;
+  els.editPlayerColor.value = player.color || "#ff6b00";
+  els.editPlayerPhoto.value = "";
+  els.editPlayerRemovePhoto.checked = false;
+  els.removePhotoLabel.hidden = !player.photo;
+  els.editPlayerDialog.showModal();
+}
+
+async function onSavePlayerEdit(event) {
+  event.preventDefault();
+  const player = state.players.find((p) => p.id === editingPlayerId);
+  if (!player) return;
+
+  const name = els.editPlayerName.value.trim();
+  if (!name) return;
+
+  const duplicate = state.players.find(
+    (p) => p.id !== editingPlayerId && p.name.toLowerCase() === name.toLowerCase()
+  );
+  if (duplicate) {
+    alert("Er bestaat al een speler met deze naam.");
+    return;
+  }
+
+  const newPhoto = await toDataUrl(els.editPlayerPhoto.files[0]);
+  player.name = name;
+  player.color = els.editPlayerColor.value;
+  if (els.editPlayerRemovePhoto.checked) {
+    player.photo = "";
+  } else if (newPhoto) {
+    player.photo = newPhoto;
+  }
+
+  editingPlayerId = null;
+  els.editPlayerDialog.close();
+  saveAndRender();
 }
 
 function renderGamePlayerSelectors() {
@@ -512,6 +641,7 @@ function renderSavedGames() {
     const meta = document.createElement("div");
     const actions = document.createElement("div");
     const openBtn = document.createElement("button");
+    const deleteBtn = document.createElement("button");
 
     meta.innerHTML = `<strong>${escapeHtml(game.name)}</strong><br /><small>${game.rounds.length} rondes${
       game.endedAt ? " - klaar" : ""
@@ -522,13 +652,39 @@ function renderSavedGames() {
     openBtn.addEventListener("click", () => {
       state.activeGameId = game.id;
       saveAndRender();
+      setActiveTab("score");
     });
 
+    deleteBtn.textContent = "Verwijder";
+    deleteBtn.className = "tiny ghost-btn";
+    deleteBtn.addEventListener("click", () => onDeleteSavedGame(game.id));
+
     actions.className = "saved-game-actions";
-    actions.appendChild(openBtn);
+    actions.append(openBtn, deleteBtn);
 
     li.append(meta, actions);
     els.savedGamesList.appendChild(li);
+  }
+}
+
+function onDeleteSavedGame(gameId) {
+  const game = state.games.find((item) => item.id === gameId);
+  if (!game) {
+    return;
+  }
+
+  if (!confirm(`Weet je zeker dat je '${game.name}' wilt verwijderen?`)) {
+    return;
+  }
+
+  state.games = state.games.filter((item) => item.id !== gameId);
+  if (state.activeGameId === gameId) {
+    state.activeGameId = state.games[0]?.id || null;
+  }
+
+  saveAndRender();
+  if (!state.activeGameId && activeTab === "score") {
+    setActiveTab("new-game");
   }
 }
 
@@ -538,7 +694,7 @@ function renderActiveGame() {
 
   els.scoreTabHint.hidden = hasGame;
   els.activeGamePanel.hidden = !hasGame;
-  els.roundForm.hidden = !hasGame;
+  els.roundForm.hidden = !hasGame || Boolean(game?.endedAt);
   els.leaderboardWrap.hidden = !hasGame;
   els.roundTableWrap.hidden = !hasGame;
 
@@ -553,7 +709,7 @@ function renderActiveGame() {
 
   els.activeGameTitle.textContent = game.name;
   els.activeGameMeta.textContent = `${playerNames || "Geen spelers"}${
-    game.endedAt ? " | Spel is afgelopen" : ""
+    game.endedAt ? " — 🏆 Spel afgelopen" : ""
   }`;
 
   els.endGameBtn.disabled = Boolean(game.endedAt);
@@ -599,12 +755,18 @@ function renderLeaderboard(game) {
   const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
   els.leaderboard.innerHTML = "";
 
-  for (const [playerId, score] of sorted) {
+  const medals = ["🥇", "🥈", "🥉"];
+
+  sorted.forEach(([playerId, score], index) => {
     const li = document.createElement("li");
     const player = getPlayer(playerId);
-    li.innerHTML = `<strong>${escapeHtml(player?.name || "Onbekend")}</strong><span>${score} punten</span>`;
+    if (index === 0) li.classList.add("rank-1");
+    const rankBadge = medals[index] || `${index + 1}.`;
+    li.innerHTML = `<span class="rank-badge">${rankBadge}</span><span class="lb-name">${escapeHtml(
+      player?.name || "Onbekend"
+    )}</span><span class="lb-score">${score} punten</span>`;
     els.leaderboard.appendChild(li);
-  }
+  });
 }
 
 function renderRoundTable(game) {
@@ -650,7 +812,7 @@ function renderRoundTable(game) {
       saveAndRender();
     });
 
-    actionTd.className = "inline-actions";
+    actionTd.className = "round-actions-cell";
     actionTd.append(editBtn, deleteBtn);
     tr.appendChild(actionTd);
 
@@ -884,6 +1046,61 @@ function computeTotals(game) {
   return totals;
 }
 
+function computeWinRanking() {
+  const rankingMap = new Map();
+
+  for (const player of state.players) {
+    rankingMap.set(player.id, {
+      playerId: player.id,
+      name: player.name,
+      wins: 0,
+      sharedWins: 0
+    });
+  }
+
+  for (const game of state.games) {
+    if (!game.endedAt || !Array.isArray(game.rounds) || game.rounds.length === 0) {
+      continue;
+    }
+
+    if (state.rankingResetAt && new Date(game.endedAt).getTime() < new Date(state.rankingResetAt).getTime()) {
+      continue;
+    }
+
+    const winners = getGameWinnerIds(game);
+    if (winners.length === 0) {
+      continue;
+    }
+
+    for (const winnerId of winners) {
+      const entry = rankingMap.get(winnerId);
+      if (!entry) {
+        continue;
+      }
+
+      entry.wins += 1;
+      if (winners.length > 1) {
+        entry.sharedWins += 1;
+      }
+    }
+  }
+
+  return Array.from(rankingMap.values())
+    .filter((entry) => entry.wins > 0)
+    .sort((a, b) => b.wins - a.wins || b.sharedWins - a.sharedWins || a.name.localeCompare(b.name, "nl"));
+}
+
+function getGameWinnerIds(game) {
+  const totals = computeTotals(game);
+  const scores = Object.entries(totals);
+  if (scores.length === 0) {
+    return [];
+  }
+
+  const topScore = Math.max(...scores.map(([, score]) => score));
+  return scores.filter(([, score]) => score === topScore).map(([playerId]) => playerId);
+}
+
 function getPlayer(id) {
   return state.players.find((player) => player.id === id);
 }
@@ -903,7 +1120,8 @@ function loadState() {
     return {
       players: [],
       games: [],
-      activeGameId: null
+      activeGameId: null,
+      rankingResetAt: null
     };
   }
 
@@ -912,15 +1130,26 @@ function loadState() {
     return {
       players: Array.isArray(parsed.players) ? parsed.players : [],
       games: Array.isArray(parsed.games) ? parsed.games : [],
-      activeGameId: parsed.activeGameId || null
+      activeGameId: parsed.activeGameId || null,
+      rankingResetAt: parsed.rankingResetAt || null
     };
   } catch {
     return {
       players: [],
       games: [],
-      activeGameId: null
+      activeGameId: null,
+      rankingResetAt: null
     };
   }
+}
+
+function resolveInitialTab() {
+  const hashTab = window.location.hash.replace("#", "");
+  if (["players", "new-game", "score"].includes(hashTab)) {
+    return hashTab;
+  }
+
+  return state.activeGameId ? "score" : "players";
 }
 
 function loadCloudConfig() {
@@ -972,14 +1201,18 @@ function getRuntimeConfig() {
   };
 }
 
-function createAvatar(name) {
+function createAvatar(name, color = "#ff6b00") {
   const initials = name
     .trim()
     .split(/\s+/)
     .slice(0, 2)
     .map((part) => part.charAt(0).toUpperCase())
     .join("") || "?";
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='100%' height='100%' fill='%23ffd7bf'/><text x='50%' y='52%' dominant-baseline='middle' text-anchor='middle' font-size='24' font-family='Arial' fill='%232c1f2a'>${initials}</text></svg>`;
+  const r = parseInt(color.slice(1, 3), 16);
+  const g = parseInt(color.slice(3, 5), 16);
+  const b = parseInt(color.slice(5, 7), 16);
+  const textFill = (r * 299 + g * 587 + b * 114) / 1000 > 128 ? "#2c1f2a" : "#ffffff";
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='100%' height='100%' fill='${color}'/><text x='50%' y='52%' dominant-baseline='middle' text-anchor='middle' font-size='24' font-family='Arial' fill='${textFill}'>${initials}</text></svg>`;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
@@ -998,17 +1231,96 @@ function toDataUrl(file) {
   }
 
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Kon foto niet lezen"));
-    reader.readAsDataURL(file);
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const maxSize = 240;
+      let { naturalWidth: w, naturalHeight: h } = img;
+      if (w > h) {
+        if (w > maxSize) {
+          h = Math.round((h * maxSize) / w);
+          w = maxSize;
+        }
+      } else if (h > maxSize) {
+        w = Math.round((w * maxSize) / h);
+        h = maxSize;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.72));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Kon foto niet lezen"));
+    };
+    img.src = objectUrl;
   });
 }
 
 function registerPWA() {
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("./sw.js").catch((error) => {
-      console.error("Service worker registratie mislukt", error);
-    });
+    navigator.serviceWorker
+      .register("./sw.js")
+      .then((registration) => {
+        swRegistration = registration;
+        monitorServiceWorker(registration);
+        syncPwaStatus();
+      })
+      .catch((error) => {
+        console.error("Service worker registratie mislukt", error);
+        syncPwaStatus("Installatieondersteuning kon niet volledig worden ingeschakeld.");
+      });
+  } else {
+    syncPwaStatus();
   }
+}
+
+function monitorServiceWorker(registration) {
+  if (!registration) {
+    return;
+  }
+
+  if (registration.waiting) {
+    syncPwaStatus("Een nieuwe app-versie staat klaar. Heropen de app om te verversen.");
+  }
+
+  registration.addEventListener("updatefound", () => {
+    const installingWorker = registration.installing;
+    if (!installingWorker) {
+      return;
+    }
+
+    installingWorker.addEventListener("statechange", () => {
+      if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+        syncPwaStatus("Nieuwe versie beschikbaar. Sluit en open de app opnieuw.");
+      }
+    });
+  });
+}
+
+function syncPwaStatus(message = "") {
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  const isOffline = !navigator.onLine;
+
+  els.installBtn.hidden = isStandalone || !deferredPrompt;
+
+  let statusMessage = message;
+  if (!statusMessage) {
+    if (isOffline) {
+      statusMessage = "Offline modus actief. Je lokale speldata blijft beschikbaar.";
+    } else if (swRegistration?.waiting) {
+      statusMessage = "Nieuwe versie beschikbaar. Sluit en open de app opnieuw.";
+    } else if (isStandalone) {
+      statusMessage = "Appmodus actief.";
+    } else if (deferredPrompt) {
+      statusMessage = "Je kunt SpelTeller op je beginscherm installeren.";
+    }
+  }
+
+  els.pwaStatus.textContent = statusMessage;
+  els.pwaStatus.hidden = !statusMessage;
 }
