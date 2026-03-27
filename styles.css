@@ -150,6 +150,7 @@ body {
   padding: 0 1rem 2rem;
   max-width: 980px;
   margin: 0 auto;
+  min-width: 0;
 }
 
 .tab-nav {
@@ -161,6 +162,7 @@ body {
   border-radius: 18px;
   padding: 0.45rem;
   box-shadow: var(--shadow);
+  min-width: 0;
 }
 
 .tab-btn {
@@ -197,6 +199,8 @@ body {
   border-radius: 22px;
   box-shadow: var(--shadow);
   padding: 1rem;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .card h2,
@@ -226,6 +230,8 @@ select {
 }
 
 input {
+  width: 100%;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 0.6rem 0.7rem;
@@ -278,6 +284,9 @@ input[type="color"]::-moz-color-swatch {
 
 .file-input-wrapper input[type="file"] {
   flex: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .file-input-wrapper button {
@@ -371,6 +380,7 @@ input:focus-visible {
   padding: 0;
   display: grid;
   gap: 0.6rem;
+  min-width: 0;
 }
 
 .player-item,
@@ -680,14 +690,29 @@ dialog::backdrop {
 @media (max-width: 860px) {
   .brand-lockup {
     gap: 0.65rem;
+    flex-wrap: wrap;
   }
 
   .hero {
     padding-top: max(2.2rem, env(safe-area-inset-top, 0px) + 1.2rem);
   }
 
+  .hero h1 {
+    font-size: clamp(1.75rem, 9vw, 2.6rem);
+    line-height: 1;
+  }
+
+  .hero p {
+    max-width: 18ch;
+    margin-inline: auto;
+  }
+
   .tab-nav {
     grid-template-columns: 1fr;
+  }
+
+  .tab-btn {
+    width: 100%;
   }
 
   .file-input-wrapper {
@@ -708,6 +733,18 @@ dialog::backdrop {
     width: 100%;
     height: 3rem;
     border-radius: 14px;
+  }
+
+  .inline-head {
+    align-items: stretch;
+  }
+
+  .inline-head > * {
+    min-width: 0;
+  }
+
+  #resetRankingBtn {
+    width: 100%;
   }
 
   .inline-actions button {
