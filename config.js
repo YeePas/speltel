@@ -1,0 +1,4 @@
+window.SPELTELLER_CONFIG = {
+  supabaseUrl: "https://ewhcpchkvvqcvuxmrksd.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3aGNwY2hrdnZxY3Z1eG1ya3NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2Mjg3NDcsImV4cCI6MjA5MDIwNDc0N30.6AqQ6rCxp62J21aV3t4KBtP0_qZxueOIQwzOxnIl-wk"
+};

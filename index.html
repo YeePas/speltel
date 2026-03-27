@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ff6b00" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon-192.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/icon-192.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bungee:wght@400&family=Nunito:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <title>SpelTeller</title>
+  </head>
+  <body>
+    <div class="background-shapes" aria-hidden="true">
+      <span class="shape shape-1"></span>
+      <span class="shape shape-2"></span>
+      <span class="shape shape-3"></span>
+      <span class="shape shape-4"></span>
+    </div>
+
+    <header class="hero">
+      <h1>SpelTeller</h1>
+      <p>Houd scores bij voor Flip7 en al jullie andere spelletjes.</p>
+      <button id="installBtn" class="ghost-btn" hidden>Installeer App</button>
+    </header>
+
+    <main class="app-shell">
+      <nav class="tab-nav" aria-label="Navigatie tabs">
+        <button type="button" class="tab-btn" data-tab-target="players">Spelers</button>
+        <button type="button" class="tab-btn" data-tab-target="new-game">Nieuw Spel</button>
+        <button type="button" class="tab-btn" data-tab-target="score">Spel Bijhouden</button>
+      </nav>
+
+      <section class="tab-panel" data-tab-panel="players">
+        <section class="card">
+          <h2>Spelers</h2>
+          <form id="playerForm" class="stack">
+            <label>
+              Naam speler
+              <input id="playerName" type="text" required maxlength="24" placeholder="Bijv. Timo" />
+            </label>
+            <label>
+              Foto (optioneel)
+              <input id="playerPhoto" type="file" accept="image/*" />
+            </label>
+            <button type="submit">Speler Toevoegen</button>
+          </form>
+          <ul id="playerList" class="player-list"></ul>
+        </section>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="new-game" hidden>
+        <section class="card">
+          <h2>Nieuw Spel Starten</h2>
+          <form id="gameForm" class="stack">
+            <label>
+              Spelnaam
+              <input id="gameName" type="text" required maxlength="40" placeholder="Flip7" />
+            </label>
+            <label>
+              Kies spelers voor dit spel
+              <div id="gamePlayers" class="checkbox-grid"></div>
+            </label>
+            <button type="submit">Start Spel</button>
+          </form>
+          <details class="saved-games">
+            <summary>Eerdere spellen</summary>
+            <ul id="savedGamesList"></ul>
+          </details>
+        </section>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="score" hidden>
+        <section class="card">
+          <h2>Spel Bijhouden</h2>
+          <p id="scoreTabHint" class="muted" hidden>Nog geen actief spel. Start eerst een spel op het tabblad Nieuw Spel.</p>
+          <div class="active-game" id="activeGamePanel" hidden>
+            <div class="inline-head">
+              <h3 id="activeGameTitle"></h3>
+              <button id="endGameBtn" class="danger-btn" type="button">Eindspel</button>
+            </div>
+            <p id="activeGameMeta" class="muted"></p>
+            <div class="inline-actions">
+              <button id="newGameBtn" type="button">Nieuw Spel</button>
+              <button id="switchGameBtn" type="button" class="ghost-btn">Wissel Spel</button>
+              <button id="deleteGameBtn" type="button" class="ghost-btn">Verwijder Spel</button>
+            </div>
+          </div>
+
+          <form id="roundForm" class="stack" hidden>
+            <label>
+              Ronde titel
+              <input id="roundLabel" type="text" maxlength="32" placeholder="Ronde 1" />
+            </label>
+            <div id="roundScores" class="score-grid"></div>
+            <button type="submit">Ronde Opslaan</button>
+          </form>
+
+          <div class="leaderboard-wrap" id="leaderboardWrap" hidden>
+            <h3>Tussenstand</h3>
+            <ul id="leaderboard" class="leaderboard"></ul>
+          </div>
+
+          <div class="table-wrap" id="roundTableWrap" hidden>
+            <table>
+              <thead>
+                <tr id="roundTableHead"></tr>
+              </thead>
+              <tbody id="roundTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="editRoundDialog">
+      <form method="dialog" id="editRoundForm" class="stack">
+        <h3>Ronde Aanpassen</h3>
+        <label>
+          Ronde titel
+          <input id="editRoundLabel" type="text" maxlength="32" />
+        </label>
+        <div id="editRoundScores" class="score-grid"></div>
+        <div class="inline-actions">
+          <button id="saveRoundEditBtn" value="save">Opslaan</button>
+          <button value="cancel" class="ghost-btn">Annuleer</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="celebrationLayer" aria-hidden="true">
+      <canvas id="confettiCanvas"></canvas>
+      <canvas id="fireworkCanvas"></canvas>
+      <div id="garlands" aria-hidden="true">
+        <span class="garland g1"></span>
+        <span class="garland g2"></span>
+        <span class="garland g3"></span>
+      </div>
+      <div id="balloons"></div>
+      <p id="winnerText"></p>
+      <p id="piggy">🐷 Hoeraaa!</p>
+      <p id="partyBear">🐻 Feestbeest!</p>
+      <p id="danceBanana">🍌 Banana dance!</p>
+    </div>
+
+    <template id="playerTemplate">
+      <li class="player-item">
+        <img class="avatar" alt="" />
+        <span class="name"></span>
+        <button class="danger-btn tiny" type="button">Verwijder</button>
+      </li>
+    </template>
+
+    <footer class="app-footer">
+      <span>gemaakt door warenhuis willemsen</span>
+      <button id="footerPartyBtn" type="button" class="tiny">Feest (eindspel)</button>
+    </footer>
+
+    <script src="config.js"></script>
+    <script src="app.js" defer></script>
+  </body>
+</html>
