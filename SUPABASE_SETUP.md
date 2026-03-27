@@ -13,7 +13,7 @@
 ## Voorbeeld config.js
 
 ```js
-window.SPELTELLER_CONFIG = {
+window.SPELLTEL_CONFIG = {
   supabaseUrl: "https://jouwproject.supabase.co",
    supabaseAnonKey: "eyJ..."
 };

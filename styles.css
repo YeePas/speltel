@@ -97,6 +97,20 @@ body {
   padding: 2.2rem 1rem 1.2rem;
 }
 
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+}
+
+.brand-logo {
+  width: clamp(3.5rem, 8vw, 4.75rem);
+  height: auto;
+  flex-shrink: 0;
+  filter: drop-shadow(0 14px 20px rgba(44, 31, 15, 0.16));
+}
+
 .hero-actions {
   display: grid;
   justify-items: center;
@@ -659,6 +673,10 @@ dialog::backdrop {
 }
 
 @media (max-width: 860px) {
+  .brand-lockup {
+    gap: 0.65rem;
+  }
+
   .hero {
     padding-top: max(2.2rem, env(safe-area-inset-top, 0px) + 1.2rem);
   }

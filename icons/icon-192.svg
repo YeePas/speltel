@@ -1,12 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#ff7a45" />
       <stop offset="100%" stop-color="#ffb400" />
     </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff8ee" />
+      <stop offset="100%" stop-color="#fff1d8" />
+    </linearGradient>
   </defs>
-  <rect width="192" height="192" rx="44" fill="url(#g)" />
-  <circle cx="96" cy="96" r="58" fill="#fff5e6" />
-  <path d="M62 106h68v12H62zM62 84h42v12H62z" fill="#2f2533" />
-  <circle cx="127" cy="90" r="10" fill="#00a8a8" />
+  <rect width="192" height="192" rx="44" fill="url(#bg)" />
+  <circle cx="147" cy="47" r="18" fill="#2ec4b6" opacity="0.26" />
+  <circle cx="48" cy="152" r="14" fill="#35a7ff" opacity="0.2" />
+  <g transform="translate(34 30)">
+    <rect x="0" y="0" width="102" height="128" rx="22" fill="url(#paper)" stroke="#2f2533" stroke-width="8" />
+    <rect x="20" y="28" width="42" height="11" rx="5.5" fill="#2f2533" />
+    <rect x="20" y="55" width="62" height="11" rx="5.5" fill="#2f2533" opacity="0.9" />
+    <rect x="20" y="82" width="30" height="11" rx="5.5" fill="#2f2533" opacity="0.9" />
+    <rect x="60" y="82" width="22" height="11" rx="5.5" fill="#ff6b00" />
+    <rect x="20" y="109" width="62" height="11" rx="5.5" fill="#2f2533" opacity="0.16" />
+  </g>
+  <g transform="translate(126 106)">
+    <circle cx="0" cy="0" r="31" fill="#2ec4b6" stroke="#2f2533" stroke-width="8" />
+    <path d="M0-14 4-4 15-3 7 5 10 15 0 9-10 15-7 5-15-3-4-4Z" fill="#fff8ee" />
+  </g>
 </svg>

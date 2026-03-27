@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "SpelTeller",
-  "short_name": "SpelTeller",
+  "name": "SpelTel",
+  "short_name": "SpelTel",
   "description": "Score-app voor Flip7 en andere spelletjes",
   "start_url": "./",
   "scope": "./",
@@ -30,7 +30,7 @@
     {
       "name": "Nieuw spel",
       "short_name": "Nieuw spel",
-      "description": "Open SpelTeller om direct een nieuw spel te starten.",
+      "description": "Open SpelTel om direct een nieuw spel te starten.",
       "url": "./#new-game",
       "icons": [
         {

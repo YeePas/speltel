@@ -118,7 +118,7 @@ function wireEvents() {
 
   window.addEventListener("appinstalled", () => {
     deferredPrompt = null;
-    syncPwaStatus("SpelTeller is geinstalleerd op dit apparaat.");
+    syncPwaStatus("SpelTel is geinstalleerd op dit apparaat.");
   });
 
   window.addEventListener("online", () => {
@@ -1187,7 +1187,7 @@ function saveCloudConfig() {
 }
 
 function getRuntimeConfig() {
-  const cfg = window.SPELTELLER_CONFIG;
+  const cfg = window.SPELLTEL_CONFIG || window.SPELTELLER_CONFIG;
   if (!cfg || typeof cfg !== "object") {
     return {
       supabaseUrl: "",
@@ -1317,7 +1317,7 @@ function syncPwaStatus(message = "") {
     } else if (isStandalone) {
       statusMessage = "Appmodus actief.";
     } else if (deferredPrompt) {
-      statusMessage = "Je kunt SpelTeller op je beginscherm installeren.";
+        statusMessage = "Je kunt SpelTel op je beginscherm installeren.";
     }
   }
 
