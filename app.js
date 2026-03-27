@@ -1,6 +1,63 @@
 const STORAGE_KEY = "spelteller-data-v1";
 const CLOUD_CONFIG_KEY = "spelteller-cloud-v1";
 const runtimeConfig = getRuntimeConfig();
+const GAME_TEMPLATES = [
+  {
+    id: "custom",
+    name: "Aangepast",
+    defaultName: "",
+    description: "Vrij spel zonder automatische eindregel. Je rondt het spel zelf af.",
+    scoreDirection: "high",
+    winThreshold: null,
+    autoEnd: false,
+    allowSharedWin: true,
+    tieBreakLabel: ""
+  },
+  {
+    id: "flip7",
+    name: "Flip7",
+    defaultName: "Flip7",
+    description: "Hoogste score wint. Het spel eindigt automatisch zodra iemand 200 punten haalt.",
+    scoreDirection: "high",
+    winThreshold: 200,
+    autoEnd: true,
+    allowSharedWin: false,
+    tieBreakLabel: "Speel een extra ronde bij gelijkspel op of boven 200."
+  },
+  {
+    id: "yahtzee",
+    name: "Yahtzee",
+    defaultName: "Yahtzee",
+    description: "Hoogste totaalscore wint. Rond het spel handmatig af wanneer jullie klaar zijn.",
+    scoreDirection: "high",
+    winThreshold: null,
+    autoEnd: false,
+    allowSharedWin: true,
+    tieBreakLabel: ""
+  },
+  {
+    id: "qwixx",
+    name: "Qwixx",
+    defaultName: "Qwixx",
+    description: "Hoogste totaalscore wint. Handmatig afronden na de laatste beurt.",
+    scoreDirection: "high",
+    winThreshold: null,
+    autoEnd: false,
+    allowSharedWin: true,
+    tieBreakLabel: ""
+  },
+  {
+    id: "rummikub",
+    name: "Rummikub",
+    defaultName: "Rummikub",
+    description: "Laagste score wint. Fijn voor varianten waarin restpunten worden opgeteld.",
+    scoreDirection: "low",
+    winThreshold: null,
+    autoEnd: false,
+    allowSharedWin: true,
+    tieBreakLabel: ""
+  }
+];
 
 const state = loadState();
 const cloud = loadCloudConfig();
@@ -9,11 +66,16 @@ let editingRoundId = null;
 let editingPlayerId = null;
 let activeTab = resolveInitialTab();
 let swRegistration = null;
+let lastCommittedState = serializeState(state);
+const undoStack = [];
+const redoStack = [];
 
 const els = {
   installBtn: document.getElementById("installBtn"),
   pwaStatus: document.getElementById("pwaStatus"),
   footerPartyBtn: document.getElementById("footerPartyBtn"),
+  undoBtn: document.getElementById("undoBtn"),
+  redoBtn: document.getElementById("redoBtn"),
   tabButtons: document.querySelectorAll(".tab-btn"),
   tabPanels: document.querySelectorAll(".tab-panel"),
   playerForm: document.getElementById("playerForm"),
@@ -25,8 +87,23 @@ const els = {
   resetRankingBtn: document.getElementById("resetRankingBtn"),
   winRanking: document.getElementById("winRanking"),
   winRankingHint: document.getElementById("winRankingHint"),
+  playerStats: document.getElementById("playerStats"),
+  playerStatsHint: document.getElementById("playerStatsHint"),
   gameForm: document.getElementById("gameForm"),
+  gameTemplate: document.getElementById("gameTemplate"),
+  templateSummary: document.getElementById("templateSummary"),
   gameName: document.getElementById("gameName"),
+  saveGroupBtn: document.getElementById("saveGroupBtn"),
+  favoriteGroups: document.getElementById("favoriteGroups"),
+  favoriteGroupsHint: document.getElementById("favoriteGroupsHint"),
+  randomRoomBtn: document.getElementById("randomRoomBtn"),
+  shareLink: document.getElementById("shareLink"),
+  copyRoomLinkBtn: document.getElementById("copyRoomLinkBtn"),
+  pushCloudBtn: document.getElementById("pushCloudBtn"),
+  pullCloudBtn: document.getElementById("pullCloudBtn"),
+  supabaseRoom: document.getElementById("supabaseRoom"),
+  roomQr: document.getElementById("roomQr"),
+  cloudStatus: document.getElementById("cloudStatus"),
   gamePlayers: document.getElementById("gamePlayers"),
   gameWinScore: document.getElementById("gameWinScore"),
   activeGamePanel: document.getElementById("activeGamePanel"),
@@ -79,6 +156,15 @@ function wireEvents() {
 
   els.playerForm.addEventListener("submit", onCreatePlayer);
   els.resetRankingBtn.addEventListener("click", onResetRanking);
+  els.gameTemplate.addEventListener("change", onTemplateChange);
+  els.saveGroupBtn.addEventListener("click", onSaveFavoriteGroup);
+  els.randomRoomBtn.addEventListener("click", onCreateRoomCode);
+  els.supabaseRoom.addEventListener("input", onRoomInput);
+  els.copyRoomLinkBtn.addEventListener("click", onCopyShareLink);
+  els.pushCloudBtn.addEventListener("click", onPushToCloud);
+  els.pullCloudBtn.addEventListener("click", onPullFromCloud);
+  els.undoBtn.addEventListener("click", onUndo);
+  els.redoBtn.addEventListener("click", onRedo);
   els.clearPlayerPhoto.addEventListener("click", (e) => {
     e.preventDefault();
     els.playerPhoto.value = "";
@@ -167,6 +253,8 @@ function onCreateGame(event) {
     return;
   }
 
+  const template = getSelectedTemplate();
+
   const playerIds = Array.from(els.gamePlayers.querySelectorAll("input:checked")).map((input) => input.value);
   if (playerIds.length === 0) {
     alert("Kies minimaal 1 speler voor dit spel.");
@@ -176,8 +264,10 @@ function onCreateGame(event) {
   const game = {
     id: crypto.randomUUID(),
     name,
+    templateId: template.id,
+    rules: cloneRules(template),
     playerIds,
-    winScore: Number(els.gameWinScore.value) || null,
+    winScore: Number(els.gameWinScore.value) || template.winThreshold || null,
     rounds: [],
     endedAt: null,
     createdAt: new Date().toISOString()
@@ -188,6 +278,8 @@ function onCreateGame(event) {
   saveAndRender();
   setActiveTab("score");
   els.gameForm.reset();
+  els.gameTemplate.value = template.id;
+  syncTemplateFields(template);
 }
 
 function onAddRound(event) {
@@ -210,15 +302,16 @@ function onAddRound(event) {
     scores
   });
 
-  if (game.winScore) {
-    const totals = computeTotals(game);
-    const winEntry = Object.entries(totals).find(([, score]) => score >= game.winScore);
-    if (winEntry) {
-      game.endedAt = new Date().toISOString();
-      saveAndRender();
-      celebrateGame(game);
-      return;
-    }
+  const evaluation = evaluateGameEnd(game);
+  if (evaluation.shouldEnd) {
+    game.endedAt = new Date().toISOString();
+    saveAndRender();
+    celebrateGame(game, evaluation.winnerIds);
+    return;
+  }
+
+  if (evaluation.awaitingTiebreak) {
+    alert(evaluation.message);
   }
 
   saveAndRender();
@@ -234,11 +327,11 @@ function onStartNewGame() {
     return;
   }
 
-  const selectedIds = new Set(game.playerIds);
-  for (const checkbox of els.gamePlayers.querySelectorAll("input[type='checkbox']")) {
-    checkbox.checked = selectedIds.has(checkbox.value);
-  }
+  applyPlayerSelection(game.playerIds);
 
+  const template = getGameTemplate(game);
+  els.gameTemplate.value = template.id;
+  syncTemplateFields(template, { preserveName: false });
   els.gameName.value = "";
   els.gameForm.scrollIntoView({ behavior: "smooth", block: "center" });
 }
@@ -276,17 +369,24 @@ function onEndGame() {
     return;
   }
 
+  const evaluation = evaluateGameEnd(game, { manual: true });
+  if (evaluation.awaitingTiebreak) {
+    alert(evaluation.message);
+    return;
+  }
+
   game.endedAt = new Date().toISOString();
   saveAndRender();
-  celebrateGame(game);
+  celebrateGame(game, evaluation.winnerIds);
 }
 
 function onFooterParty() {
   const game = getActiveGame();
   if (game) {
-    const totals = computeTotals(game);
-    const top = Object.entries(totals).sort((a, b) => b[1] - a[1])[0];
-    const winner = top ? getPlayer(top[0])?.name : "Iedereen";
+    const winner = getGameWinnerIds(game)
+      .map((id) => getPlayer(id)?.name)
+      .filter(Boolean)
+      .join(", ") || "Iedereen";
     playCelebration(`Feestje! Koploper: ${winner}`, `🐷 Yay ${winner}!`);
     return;
   }
@@ -318,10 +418,15 @@ function onSaveRoundEdit(event) {
 
 function render() {
   renderTabs();
+  renderGameTemplateOptions();
   renderPlayers();
   renderWinRanking();
+  renderPlayerStats();
   renderGamePlayerSelectors();
+  renderFavoriteGroups();
   renderSavedGames();
+  renderCloudPanel();
+  renderHistoryButtons();
   renderActiveGame();
 }
 
@@ -344,10 +449,69 @@ function setActiveTab(tabName) {
   renderTabs();
 }
 
-function renderCloudForm() {
-  els.supabaseUrl.value = cloud.url;
-  els.supabaseAnonKey.value = cloud.anonKey;
+function onTemplateChange() {
+  syncTemplateFields(getSelectedTemplate());
+}
+
+function renderGameTemplateOptions() {
+  const currentValue = els.gameTemplate.value || state.lastTemplateId || "custom";
+  els.gameTemplate.innerHTML = "";
+
+  for (const template of GAME_TEMPLATES) {
+    const option = document.createElement("option");
+    option.value = template.id;
+    option.textContent = template.name;
+    option.selected = template.id === currentValue;
+    els.gameTemplate.appendChild(option);
+  }
+
+  const selectedTemplate = getTemplateById(currentValue);
+  els.gameTemplate.value = selectedTemplate.id;
+  syncTemplateFields(selectedTemplate, { preserveName: true });
+}
+
+function syncTemplateFields(template, options = {}) {
+  const { preserveName = false } = options;
+  state.lastTemplateId = template.id;
+
+  const shouldFillName =
+    !preserveName ||
+    !els.gameName.value.trim() ||
+    GAME_TEMPLATES.some((item) => item.defaultName && item.defaultName === els.gameName.value.trim());
+
+  if (shouldFillName) {
+    els.gameName.value = template.defaultName;
+  }
+
+  els.gameWinScore.value = template.winThreshold ?? "";
+  els.gameWinScore.disabled = template.autoEnd && template.winThreshold !== null;
+
+  const scoreLabel = template.scoreDirection === "low" ? "Laagste score wint." : "Hoogste score wint.";
+  const endLabel = template.autoEnd
+    ? `Automatisch einde bij ${template.winThreshold} punten.`
+    : "Handmatig afronden.";
+  const tieLabel = template.tieBreakLabel || (template.allowSharedWin ? "Gelijkspel telt als gedeelde winst." : "");
+  els.templateSummary.textContent = [template.description, scoreLabel, endLabel, tieLabel].filter(Boolean).join(" ");
+}
+
+function getSelectedTemplate() {
+  return getTemplateById(els.gameTemplate.value);
+}
+
+function renderCloudPanel() {
   els.supabaseRoom.value = cloud.room;
+  els.shareLink.value = getShareLink();
+  els.copyRoomLinkBtn.disabled = !cloud.room;
+  const hasRuntimeCloud = Boolean(cloud.url && cloud.anonKey);
+  els.pushCloudBtn.disabled = !hasRuntimeCloud;
+  els.pullCloudBtn.disabled = !hasRuntimeCloud;
+  const qrUrl = getQrCodeUrl();
+  els.roomQr.hidden = !qrUrl;
+  if (qrUrl) {
+    els.roomQr.src = qrUrl;
+  } else {
+    els.roomQr.removeAttribute("src");
+  }
   renderCloudStatus();
 }
 
@@ -368,8 +532,8 @@ function renderCloudStatus(message) {
 }
 
 function onSaveCloudConfig() {
-  cloud.url = sanitizeSupabaseUrl(els.supabaseUrl.value.trim());
-  cloud.anonKey = els.supabaseAnonKey.value.trim();
+  cloud.url = sanitizeSupabaseUrl(runtimeConfig.supabaseUrl);
+  cloud.anonKey = runtimeConfig.supabaseAnonKey;
   cloud.room = els.supabaseRoom.value.trim();
 
   const hasConfig = Boolean(cloud.url && cloud.anonKey && cloud.room);
@@ -381,6 +545,67 @@ function onSaveCloudConfig() {
 
   saveCloudConfig();
   renderCloudStatus("verbinding opgeslagen.");
+}
+
+function onRoomInput() {
+  cloud.room = slugifyRoom(els.supabaseRoom.value);
+  els.supabaseRoom.value = cloud.room;
+  saveCloudConfig();
+  renderCloudPanel();
+}
+
+function onCreateRoomCode() {
+  cloud.room = createRoomCode();
+  saveCloudConfig();
+  renderCloudPanel();
+}
+
+async function onCopyShareLink() {
+  const link = getShareLink();
+  if (!link) {
+    onCreateRoomCode();
+  }
+
+  const nextLink = getShareLink();
+  if (!nextLink) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(nextLink);
+    renderCloudStatus("deellink gekopieerd.");
+  } catch {
+    els.shareLink.select();
+    document.execCommand("copy");
+    renderCloudStatus("deellink gekopieerd.");
+  }
+}
+
+function onUndo() {
+  if (undoStack.length === 0) {
+    return;
+  }
+
+  const currentSnapshot = serializeState(state);
+  const previousSnapshot = undoStack.pop();
+  redoStack.push(currentSnapshot);
+  restoreState(previousSnapshot);
+}
+
+function onRedo() {
+  if (redoStack.length === 0) {
+    return;
+  }
+
+  const currentSnapshot = serializeState(state);
+  const nextSnapshot = redoStack.pop();
+  undoStack.push(currentSnapshot);
+  restoreState(nextSnapshot);
+}
+
+function renderHistoryButtons() {
+  els.undoBtn.disabled = undoStack.length === 0;
+  els.redoBtn.disabled = redoStack.length === 0;
 }
 
 async function onPushToCloud() {
@@ -420,7 +645,10 @@ async function onPullFromCloud() {
 
     state.players = Array.isArray(remoteState.players) ? remoteState.players : [];
     state.games = Array.isArray(remoteState.games) ? remoteState.games : [];
+    state.groups = Array.isArray(remoteState.groups) ? remoteState.groups : [];
     state.activeGameId = remoteState.activeGameId || state.games[0]?.id || null;
+    state.rankingResetAt = remoteState.rankingResetAt || null;
+    state.lastTemplateId = remoteState.lastTemplateId || "custom";
     cloud.lastSyncedAt = new Date().toISOString();
     saveCloudConfig();
     saveAndRender();
@@ -445,7 +673,10 @@ function cloudSnapshot() {
   return {
     players: state.players,
     games: state.games,
-    activeGameId: state.activeGameId
+    groups: state.groups,
+    activeGameId: state.activeGameId,
+    rankingResetAt: state.rankingResetAt,
+    lastTemplateId: state.lastTemplateId
   };
 }
 
@@ -567,6 +798,35 @@ function renderWinRanking() {
   });
 }
 
+function renderPlayerStats() {
+  const stats = computePlayerStats();
+  els.playerStats.innerHTML = "";
+
+  if (stats.length === 0) {
+    els.playerStats.hidden = true;
+    els.playerStatsHint.hidden = false;
+    return;
+  }
+
+  els.playerStats.hidden = false;
+  els.playerStatsHint.hidden = true;
+
+  for (const entry of stats) {
+    const card = document.createElement("article");
+    card.className = "stats-card";
+    card.innerHTML = `
+      <h4>${escapeHtml(entry.name)}</h4>
+      <div class="stats-grid">
+        <div class="stat-pill"><span class="stat-label">Gewonnen</span><span class="stat-value">${entry.wins}</span></div>
+        <div class="stat-pill"><span class="stat-label">Gem. punten</span><span class="stat-value">${entry.averageScore}</span></div>
+        <div class="stat-pill"><span class="stat-label">Hoogste ronde</span><span class="stat-value">${entry.highestRound}</span></div>
+        <div class="stat-pill"><span class="stat-label">Win streak</span><span class="stat-value">${entry.longestStreak}</span></div>
+      </div>
+    `;
+    els.playerStats.appendChild(card);
+  }
+}
+
 function onEditPlayer(playerId) {
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return;
@@ -627,6 +887,102 @@ function renderGamePlayerSelectors() {
   }
 }
 
+function renderFavoriteGroups() {
+  els.favoriteGroups.innerHTML = "";
+
+  if (!Array.isArray(state.groups) || state.groups.length === 0) {
+    els.favoriteGroups.hidden = true;
+    els.favoriteGroupsHint.hidden = false;
+    return;
+  }
+
+  els.favoriteGroups.hidden = false;
+  els.favoriteGroupsHint.hidden = true;
+
+  for (const group of state.groups) {
+    const item = document.createElement("div");
+    item.className = "chip-item";
+
+    const applyBtn = document.createElement("button");
+    applyBtn.type = "button";
+    applyBtn.className = "ghost-btn tiny";
+    applyBtn.textContent = group.name;
+    applyBtn.addEventListener("click", () => applyFavoriteGroup(group.id));
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "tiny danger-btn";
+    removeBtn.textContent = "✕";
+    removeBtn.title = `${group.name} verwijderen`;
+    removeBtn.addEventListener("click", () => removeFavoriteGroup(group.id));
+
+    item.append(applyBtn, removeBtn);
+    els.favoriteGroups.appendChild(item);
+  }
+}
+
+function onSaveFavoriteGroup() {
+  const selectedIds = getSelectedGamePlayerIds();
+  if (selectedIds.length === 0) {
+    alert("Selecteer eerst minimaal 1 speler voor je favoriete groep.");
+    return;
+  }
+
+  const name = prompt("Naam voor deze favoriete groep?");
+  if (!name || !name.trim()) {
+    return;
+  }
+
+  const trimmedName = name.trim();
+  const existing = state.groups.find((group) => group.name.toLowerCase() === trimmedName.toLowerCase());
+  if (existing) {
+    existing.playerIds = selectedIds;
+  } else {
+    state.groups.push({
+      id: crypto.randomUUID(),
+      name: trimmedName,
+      playerIds: selectedIds
+    });
+  }
+
+  saveAndRender();
+  applyPlayerSelection(selectedIds);
+}
+
+function applyFavoriteGroup(groupId) {
+  const group = state.groups.find((item) => item.id === groupId);
+  if (!group) {
+    return;
+  }
+
+  applyPlayerSelection(group.playerIds);
+}
+
+function removeFavoriteGroup(groupId) {
+  const group = state.groups.find((item) => item.id === groupId);
+  if (!group) {
+    return;
+  }
+
+  if (!confirm(`Favoriete groep '${group.name}' verwijderen?`)) {
+    return;
+  }
+
+  state.groups = state.groups.filter((item) => item.id !== groupId);
+  saveAndRender();
+}
+
+function getSelectedGamePlayerIds() {
+  return Array.from(els.gamePlayers.querySelectorAll("input:checked")).map((input) => input.value);
+}
+
+function applyPlayerSelection(playerIds) {
+  const selectedIds = new Set(playerIds);
+  for (const checkbox of els.gamePlayers.querySelectorAll("input[type='checkbox']")) {
+    checkbox.checked = selectedIds.has(checkbox.value);
+  }
+}
+
 function renderSavedGames() {
   els.savedGamesList.innerHTML = "";
   if (state.games.length === 0) {
@@ -643,9 +999,10 @@ function renderSavedGames() {
     const openBtn = document.createElement("button");
     const deleteBtn = document.createElement("button");
 
-    meta.innerHTML = `<strong>${escapeHtml(game.name)}</strong><br /><small>${game.rounds.length} rondes${
-      game.endedAt ? " - klaar" : ""
-    }</small>`;
+    const template = getGameTemplate(game);
+    meta.innerHTML = `<strong>${escapeHtml(game.name)}</strong><br /><small>${escapeHtml(
+      template.name
+    )} · ${game.rounds.length} rondes${game.endedAt ? " - klaar" : ""}</small>`;
 
     openBtn.textContent = "Open";
     openBtn.className = "tiny";
@@ -706,9 +1063,13 @@ function renderActiveGame() {
     .map((id) => getPlayer(id)?.name)
     .filter(Boolean)
     .join(", ");
+  const template = getGameTemplate(game);
+  const evaluation = evaluateGameEnd(game, { manual: true });
+  const ruleBits = [template.name, template.rulesLabel].filter(Boolean).join(" · ");
+  const tieBreakNote = evaluation.awaitingTiebreak ? ` · ${evaluation.message}` : "";
 
   els.activeGameTitle.textContent = game.name;
-  els.activeGameMeta.textContent = `${playerNames || "Geen spelers"}${
+  els.activeGameMeta.textContent = `${playerNames || "Geen spelers"} · ${ruleBits}${tieBreakNote}${
     game.endedAt ? " — 🏆 Spel afgelopen" : ""
   }`;
 
@@ -751,13 +1112,12 @@ function renderRoundInputs(game) {
 }
 
 function renderLeaderboard(game) {
-  const totals = computeTotals(game);
-  const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  const sorted = getRankedEntries(game);
   els.leaderboard.innerHTML = "";
 
   const medals = ["🥇", "🥈", "🥉"];
 
-  sorted.forEach(([playerId, score], index) => {
+  sorted.forEach(({ playerId, score }, index) => {
     const li = document.createElement("li");
     const player = getPlayer(playerId);
     if (index === 0) li.classList.add("rank-1");
@@ -855,10 +1215,11 @@ function openRoundEdit(game, round) {
   els.editRoundDialog.showModal();
 }
 
-function celebrateGame(game) {
-  const totals = computeTotals(game);
-  const top = Object.entries(totals).sort((a, b) => b[1] - a[1])[0];
-  const winner = top ? getPlayer(top[0])?.name : "Niemand";
+function celebrateGame(game, winnerIds) {
+  const winner = (winnerIds || getGameWinnerIds(game))
+    .map((id) => getPlayer(id)?.name)
+    .filter(Boolean)
+    .join(", ") || "Niemand";
   playCelebration(`Klaar! Winnaar: ${winner}`, `🐷 Hoera ${winner}!`);
 }
 
@@ -1046,6 +1407,88 @@ function computeTotals(game) {
   return totals;
 }
 
+function evaluateGameEnd(game, options = {}) {
+  const { manual = false } = options;
+  const rules = getGameRules(game);
+  if (!Array.isArray(game.rounds) || game.rounds.length === 0) {
+    return {
+      shouldEnd: false,
+      awaitingTiebreak: false,
+      winnerIds: [],
+      message: ""
+    };
+  }
+
+  const rankedEntries = getRankedEntries(game);
+  const topEntry = rankedEntries[0];
+
+  if (!topEntry) {
+    return {
+      shouldEnd: false,
+      awaitingTiebreak: false,
+      winnerIds: [],
+      message: ""
+    };
+  }
+
+  const winnerIds = rankedEntries
+    .filter((entry) => entry.score === topEntry.score)
+    .map((entry) => entry.playerId);
+
+  const reachedThreshold =
+    rules.autoEnd && rules.winThreshold !== null
+      ? rules.scoreDirection === "low"
+        ? topEntry.score <= rules.winThreshold
+        : topEntry.score >= rules.winThreshold
+      : false;
+
+  const hasTie = winnerIds.length > 1;
+  if (hasTie && !rules.allowSharedWin) {
+    return {
+      shouldEnd: false,
+      awaitingTiebreak: true,
+      winnerIds,
+      message: rules.tieBreakLabel || "Er is een gelijkspel. Speel een beslissende ronde."
+    };
+  }
+
+  if (manual || reachedThreshold) {
+    return {
+      shouldEnd: true,
+      awaitingTiebreak: false,
+      winnerIds,
+      message: ""
+    };
+  }
+
+  return {
+    shouldEnd: false,
+    awaitingTiebreak: false,
+    winnerIds,
+    message: ""
+  };
+}
+
+function getRankedEntries(game) {
+  const totals = computeTotals(game);
+  const directionFactor = getGameRules(game).scoreDirection === "low" ? 1 : -1;
+  return Object.entries(totals)
+    .map(([playerId, score]) => ({
+      playerId,
+      score
+    }))
+    .sort((a, b) => {
+      const scoreDelta = directionFactor * (a.score - b.score);
+      if (scoreDelta !== 0) {
+        return scoreDelta;
+      }
+
+      const aName = getPlayer(a.playerId)?.name || "";
+      const bName = getPlayer(b.playerId)?.name || "";
+      return aName.localeCompare(bName, "nl");
+    });
+}
+
 function computeWinRanking() {
   const rankingMap = new Map();
 
@@ -1090,15 +1533,133 @@ function computeWinRanking() {
     .sort((a, b) => b.wins - a.wins || b.sharedWins - a.sharedWins || a.name.localeCompare(b.name, "nl"));
 }
 
+function computePlayerStats() {
+  const endedGames = state.games
+    .filter((game) => Array.isArray(game.rounds) && game.rounds.length > 0)
+    .slice()
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  return state.players
+    .map((player) => {
+      let wins = 0;
+      let totalScore = 0;
+      let gamesPlayed = 0;
+      let highestRound = 0;
+      let longestStreak = 0;
+      let currentStreak = 0;
+
+      for (const game of endedGames) {
+        if (!game.playerIds.includes(player.id)) {
+          continue;
+        }
+
+        const totals = computeTotals(game);
+        totalScore += Number(totals[player.id] || 0);
+        gamesPlayed += 1;
+
+        for (const round of game.rounds) {
+          highestRound = Math.max(highestRound, Number(round.scores[player.id] || 0));
+        }
+
+        if (game.endedAt && getGameWinnerIds(game).includes(player.id)) {
+          wins += 1;
+          currentStreak += 1;
+          longestStreak = Math.max(longestStreak, currentStreak);
+        } else if (game.endedAt) {
+          currentStreak = 0;
+        }
+      }
+
+      return {
+        playerId: player.id,
+        name: player.name,
+        wins,
+        averageScore: gamesPlayed > 0 ? Math.round(totalScore / gamesPlayed) : 0,
+        highestRound,
+        longestStreak,
+        gamesPlayed
+      };
+    })
+    .filter((entry) => entry.gamesPlayed > 0)
+    .sort((a, b) => b.wins - a.wins || b.longestStreak - a.longestStreak || a.name.localeCompare(b.name, "nl"));
+}
+
 function getGameWinnerIds(game) {
-  const totals = computeTotals(game);
-  const scores = Object.entries(totals);
-  if (scores.length === 0) {
-    return [];
+  return evaluateGameEnd(game, { manual: true }).winnerIds;
+}
+
+function getTemplateById(templateId) {
+  return GAME_TEMPLATES.find((template) => template.id === templateId) || GAME_TEMPLATES[0];
+}
+
+function getGameTemplate(game) {
+  const template = getTemplateById(game?.templateId || state.lastTemplateId || "custom");
+  return {
+    ...template,
+    rulesLabel: describeRules(getGameRules(game ?? { templateId: template.id, rules: cloneRules(template) }))
+  };
+}
+
+function getGameRules(game) {
+  const template = getTemplateById(game?.templateId);
+  return {
+    ...cloneRules(template),
+    ...(game?.rules || {}),
+    winThreshold: game?.winScore ?? game?.rules?.winThreshold ?? template.winThreshold
+  };
+}
+
+function cloneRules(template) {
+  return {
+    scoreDirection: template.scoreDirection,
+    winThreshold: template.winThreshold,
+    autoEnd: template.autoEnd,
+    allowSharedWin: template.allowSharedWin,
+    tieBreakLabel: template.tieBreakLabel
+  };
+}
+
+function describeRules(rules) {
+  const direction = rules.scoreDirection === "low" ? "laagste score wint" : "hoogste score wint";
+  const ending =
+    rules.autoEnd && rules.winThreshold !== null
+      ? `auto einde bij ${rules.winThreshold}`
+      : "handmatig einde";
+  const tie = rules.allowSharedWin ? "gedeelde winst ok" : "tie-break bij gelijkspel";
+  return `${direction} · ${ending} · ${tie}`;
+}
+
+function getShareLink() {
+  if (!cloud.room) {
+    return "";
   }
 
-  const topScore = Math.max(...scores.map(([, score]) => score));
-  return scores.filter(([, score]) => score === topScore).map(([playerId]) => playerId);
+  const url = new URL(window.location.href);
+  url.searchParams.set("room", cloud.room);
+  url.hash = "new-game";
+  return url.toString();
+}
+
+function getQrCodeUrl() {
+  const link = getShareLink();
+  if (!link) {
+    return "";
+  }
+
+  return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(link)}`;
+}
+
+function slugifyRoom(value) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-_]/g, "")
+    .slice(0, 24);
+}
+
+function createRoomCode() {
+  return `room-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function getPlayer(id) {
@@ -1110,7 +1671,41 @@ function getActiveGame() {
 }
 
 function saveAndRender() {
+  const currentSnapshot = serializeState(state);
+  if (currentSnapshot !== lastCommittedState) {
+    undoStack.push(lastCommittedState);
+    if (undoStack.length > 40) {
+      undoStack.shift();
+    }
+    redoStack.length = 0;
+  }
+
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  lastCommittedState = currentSnapshot;
+  render();
+}
+
+function serializeState(snapshotState) {
+  return JSON.stringify({
+    players: snapshotState.players,
+    games: snapshotState.games,
+    activeGameId: snapshotState.activeGameId,
+    rankingResetAt: snapshotState.rankingResetAt,
+    groups: snapshotState.groups,
+    lastTemplateId: snapshotState.lastTemplateId
+  });
+}
+
+function restoreState(serializedSnapshot) {
+  const snapshot = JSON.parse(serializedSnapshot);
+  state.players = Array.isArray(snapshot.players) ? snapshot.players : [];
+  state.games = Array.isArray(snapshot.games) ? snapshot.games : [];
+  state.activeGameId = snapshot.activeGameId || state.games[0]?.id || null;
+  state.rankingResetAt = snapshot.rankingResetAt || null;
+  state.groups = Array.isArray(snapshot.groups) ? snapshot.groups : [];
+  state.lastTemplateId = typeof snapshot.lastTemplateId === "string" ? snapshot.lastTemplateId : "custom";
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  lastCommittedState = serializeState(state);
   render();
 }
 
@@ -1121,7 +1716,9 @@ function loadState() {
       players: [],
       games: [],
       activeGameId: null,
-      rankingResetAt: null
+      rankingResetAt: null,
+      groups: [],
+      lastTemplateId: "custom"
     };
   }
 
@@ -1131,14 +1728,18 @@ function loadState() {
       players: Array.isArray(parsed.players) ? parsed.players : [],
       games: Array.isArray(parsed.games) ? parsed.games : [],
       activeGameId: parsed.activeGameId || null,
-      rankingResetAt: parsed.rankingResetAt || null
+      rankingResetAt: parsed.rankingResetAt || null,
+      groups: Array.isArray(parsed.groups) ? parsed.groups : [],
+      lastTemplateId: typeof parsed.lastTemplateId === "string" ? parsed.lastTemplateId : "custom"
     };
   } catch {
     return {
       players: [],
       games: [],
       activeGameId: null,
-      rankingResetAt: null
+      rankingResetAt: null,
+      groups: [],
+      lastTemplateId: "custom"
     };
   }
 }
@@ -1154,10 +1755,11 @@ function resolveInitialTab() {
 
 function loadCloudConfig() {
   const raw = localStorage.getItem(CLOUD_CONFIG_KEY);
+  const urlRoom = slugifyRoom(new URL(window.location.href).searchParams.get("room") || "");
   const fallback = {
     url: sanitizeSupabaseUrl(runtimeConfig.supabaseUrl),
     anonKey: runtimeConfig.supabaseAnonKey,
-    room: "",
+    room: urlRoom,
     lastSyncedAt: null
   };
 
@@ -1174,7 +1776,10 @@ function loadCloudConfig() {
           : fallback.url,
       anonKey:
         typeof parsed.anonKey === "string" && parsed.anonKey.trim() ? parsed.anonKey : fallback.anonKey,
-      room: typeof parsed.room === "string" && parsed.room.trim() ? parsed.room : fallback.room,
+      room:
+        typeof parsed.room === "string" && parsed.room.trim()
+          ? slugifyRoom(parsed.room)
+          : fallback.room,
       lastSyncedAt: parsed.lastSyncedAt || null
     };
   } catch {

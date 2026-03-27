@@ -39,6 +39,13 @@ body {
   opacity: 0.88;
 }
 
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .background-shapes .shape {
   position: fixed;
   pointer-events: none;
@@ -229,7 +236,8 @@ select {
   font: inherit;
 }
 
-input {
+input,
+select {
   width: 100%;
   max-width: 100%;
   border: 1px solid var(--line);
@@ -354,6 +362,97 @@ input:focus-visible {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 0.45rem;
+}
+
+.group-panel {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.stats-panel,
+.share-panel {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.chip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.stats-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.stats-card {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.stats-card h4 {
+  margin: 0;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.55rem;
+}
+
+.stat-pill {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  background: rgba(255, 247, 230, 0.88);
+  border: 1px solid rgba(255, 107, 0, 0.14);
+}
+
+.stat-label {
+  font-size: 0.76rem;
+  opacity: 0.7;
+}
+
+.stat-value {
+  font-weight: 800;
+}
+
+.share-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 132px) 1fr;
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.qr-preview {
+  width: 132px;
+  height: 132px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 0.4rem;
+}
+
+.share-actions {
+  display: grid;
+  gap: 0.6rem;
 }
 
 .choice,
@@ -745,6 +844,34 @@ dialog::backdrop {
 
   #resetRankingBtn {
     width: 100%;
+  }
+
+  .chip-list {
+    display: grid;
+  }
+
+  .chip-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .share-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .qr-preview {
+    width: min(100%, 180px);
+    height: auto;
+    aspect-ratio: 1;
+    justify-self: center;
+  }
+
+  .footer-actions {
+    width: 100%;
+  }
+
+  .footer-actions button {
+    flex: 1 1 100%;
   }
 
   .inline-actions button {
