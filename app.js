@@ -327,7 +327,7 @@ function onAddRound(event) {
   const scores = {};
 
   for (const input of els.roundScores.querySelectorAll("input")) {
-    scores[input.dataset.playerId] = Number(input.value || 0);
+    scores[input.dataset.playerId] = parseScoreValue(input.value);
   }
 
   game.rounds.push({
@@ -442,7 +442,7 @@ function onSaveRoundEdit(event) {
 
   round.label = els.editRoundLabel.value.trim() || round.label;
   for (const input of els.editRoundScores.querySelectorAll("input")) {
-    round.scores[input.dataset.playerId] = Number(input.value || 0);
+    round.scores[input.dataset.playerId] = parseScoreValue(input.value);
   }
 
   editingRoundId = null;
@@ -1361,9 +1361,11 @@ function renderRoundInputs(game) {
     name.textContent = player.name;
 
     const input = document.createElement("input");
-    input.type = "number";
-    input.step = "1";
-    input.value = "0";
+    input.type = "text";
+    input.inputMode = "decimal";
+    input.autocomplete = "off";
+    input.placeholder = "0";
+    input.pattern = "-?[0-9]*";
     input.dataset.playerId = player.id;
 
     wrapper.append(name, input);
@@ -1468,8 +1470,10 @@ function openRoundEdit(game, round) {
     name.textContent = player.name;
 
     const input = document.createElement("input");
-    input.type = "number";
-    input.step = "1";
+    input.type = "text";
+    input.inputMode = "decimal";
+    input.autocomplete = "off";
+    input.pattern = "-?[0-9]*";
     input.value = round.scores[player.id] ?? 0;
     input.dataset.playerId = player.id;
 
@@ -2087,6 +2091,19 @@ function createAvatar(name, color = "#ff6b00") {
   const textFill = (r * 299 + g * 587 + b * 114) / 1000 > 128 ? "#2c1f2a" : "#ffffff";
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='100%' height='100%' fill='${color}'/><text x='50%' y='52%' dominant-baseline='middle' text-anchor='middle' font-size='24' font-family='Arial' fill='${textFill}'>${initials}</text></svg>`;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function parseScoreValue(value) {
+  const sanitized = String(value || "")
+    .trim()
+    .replace(",", ".");
+
+  if (!sanitized) {
+    return 0;
+  }
+
+  const parsed = Number(sanitized);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function escapeHtml(value) {
