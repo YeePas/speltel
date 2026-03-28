@@ -1110,16 +1110,35 @@ function renderGamePlayerSelectors() {
   els.gamePlayers.innerHTML = "";
   for (const player of state.players) {
     const wrapper = document.createElement("label");
-    wrapper.className = "choice";
+    wrapper.className = "choice game-player-choice";
+    wrapper.style.setProperty("--player-accent", player.color || "#ff6b00");
 
     const input = document.createElement("input");
     input.type = "checkbox";
     input.value = player.id;
+    input.className = "game-player-checkbox";
+    input.addEventListener("change", () => updateGamePlayerChoiceState(wrapper, input.checked));
+
+    const avatar = document.createElement("img");
+    avatar.className = "game-player-avatar";
+    avatar.src = player.photo || createAvatar(player.name, player.color);
+    avatar.alt = "";
+    avatar.decoding = "async";
+
+    const textWrap = document.createElement("span");
+    textWrap.className = "game-player-meta";
 
     const text = document.createElement("span");
+    text.className = "game-player-name";
     text.textContent = player.name;
 
-    wrapper.append(input, text);
+    const accent = document.createElement("span");
+    accent.className = "game-player-accent";
+    accent.setAttribute("aria-hidden", "true");
+
+    textWrap.append(text, accent);
+    wrapper.append(input, avatar, textWrap);
+    updateGamePlayerChoiceState(wrapper, false);
     els.gamePlayers.appendChild(wrapper);
   }
 }
@@ -1217,7 +1236,16 @@ function applyPlayerSelection(playerIds) {
   const selectedIds = new Set(playerIds);
   for (const checkbox of els.gamePlayers.querySelectorAll("input[type='checkbox']")) {
     checkbox.checked = selectedIds.has(checkbox.value);
+    updateGamePlayerChoiceState(checkbox.closest(".game-player-choice"), checkbox.checked);
   }
+}
+
+function updateGamePlayerChoiceState(node, isSelected) {
+  if (!node) {
+    return;
+  }
+
+  node.classList.toggle("is-selected", isSelected);
 }
 
 function renderSavedGames() {
