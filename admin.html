@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="SpelTel admin overzicht van rooms." />
+    <title>SpelTel Admin</title>
+    <link rel="icon" href="icons/icon-192.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bungee:wght@400&family=Nunito:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="background-shapes" aria-hidden="true">
+      <span class="shape shape-1"></span>
+      <span class="shape shape-2"></span>
+      <span class="shape shape-3"></span>
+      <span class="shape shape-4"></span>
+    </div>
+
+    <header class="hero admin-hero">
+      <div class="brand-lockup">
+        <img class="brand-logo" src="icons/logo-mark.svg" alt="SpelTel logo" />
+        <h1>SpelTel</h1>
+      </div>
+      <p>Admin overzicht van alle rooms.</p>
+    </header>
+
+    <main class="app-shell admin-shell">
+      <section id="adminLoginCard" class="card admin-card">
+        <p class="eyebrow">Admin</p>
+        <h2>Inloggen</h2>
+        <p class="muted">Gebruik `admin` als gebruikersnaam en `admin` als wachtwoord.</p>
+        <form id="adminLoginForm" class="stack">
+          <label>
+            Gebruikersnaam
+            <input id="adminUsername" type="text" autocomplete="username" required />
+          </label>
+          <label>
+            Wachtwoord
+            <input id="adminPassword" type="password" autocomplete="current-password" required />
+          </label>
+          <button type="submit">Login</button>
+        </form>
+        <p id="adminLoginStatus" class="room-status" hidden></p>
+      </section>
+
+      <section id="adminDashboard" class="tab-panel" hidden>
+        <section class="card">
+          <div class="inline-head">
+            <div>
+              <p class="eyebrow">Beheer</p>
+              <h2>Alle Rooms</h2>
+            </div>
+            <div class="inline-actions">
+              <button id="refreshRoomsBtn" type="button">Vernieuwen</button>
+              <button id="logoutAdminBtn" type="button" class="ghost-btn">Uitloggen</button>
+            </div>
+          </div>
+          <div class="admin-summary">
+            <article class="stat-pill">
+              <span class="stat-label">Rooms</span>
+              <span id="roomCount" class="stat-value">0</span>
+            </article>
+            <article class="stat-pill">
+              <span class="stat-label">Spelers totaal</span>
+              <span id="playerCount" class="stat-value">0</span>
+            </article>
+            <article class="stat-pill">
+              <span class="stat-label">Spellen totaal</span>
+              <span id="gameCount" class="stat-value">0</span>
+            </article>
+          </div>
+          <label class="admin-search">
+            Zoek room
+            <input id="roomSearch" type="search" placeholder="Bijv. familie-avond" />
+          </label>
+          <p id="adminStatus" class="room-status" hidden></p>
+          <div id="roomList" class="admin-room-list"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="admin.js" defer></script>
+  </body>
+</html>

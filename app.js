@@ -69,10 +69,23 @@ let swRegistration = null;
 let lastCommittedState = serializeState(state);
 const undoStack = [];
 const redoStack = [];
+let autoPushTimer = null;
+let isApplyingRemoteState = false;
+let cloudStatusKind = "idle";
+let isRoomReady = false;
+let isEnteringRoom = false;
 
 const els = {
+  appShell: document.querySelector(".app-shell"),
   installBtn: document.getElementById("installBtn"),
   pwaStatus: document.getElementById("pwaStatus"),
+  roomGate: document.getElementById("roomGate"),
+  roomGateForm: document.getElementById("roomGateForm"),
+  roomGateInput: document.getElementById("roomGateInput"),
+  roomGateMessage: document.getElementById("roomGateMessage"),
+  roomGateStatus: document.getElementById("roomGateStatus"),
+  joinRoomBtn: document.getElementById("joinRoomBtn"),
+  createRoomBtn: document.getElementById("createRoomBtn"),
   footerPartyBtn: document.getElementById("footerPartyBtn"),
   undoBtn: document.getElementById("undoBtn"),
   redoBtn: document.getElementById("redoBtn"),
@@ -148,6 +161,7 @@ const els = {
 wireEvents();
 render();
 registerPWA();
+initializeRoomExperience();
 
 function wireEvents() {
   for (const button of els.tabButtons) {
@@ -158,8 +172,11 @@ function wireEvents() {
   els.resetRankingBtn.addEventListener("click", onResetRanking);
   els.gameTemplate.addEventListener("change", onTemplateChange);
   els.saveGroupBtn.addEventListener("click", onSaveFavoriteGroup);
+  els.roomGateForm.addEventListener("submit", onJoinRoom);
+  els.createRoomBtn.addEventListener("click", onCreateRoomFromGate);
   els.randomRoomBtn.addEventListener("click", onCreateRoomCode);
   els.supabaseRoom.addEventListener("input", onRoomInput);
+  els.supabaseRoom.addEventListener("change", onRoomCommit);
   els.copyRoomLinkBtn.addEventListener("click", onCopyShareLink);
   els.pushCloudBtn.addEventListener("click", onPushToCloud);
   els.pullCloudBtn.addEventListener("click", onPullFromCloud);
@@ -214,6 +231,23 @@ function wireEvents() {
   window.addEventListener("offline", () => {
     syncPwaStatus("Offline modus actief. Je lokale speldata blijft beschikbaar.");
   });
+
+  window.addEventListener("focus", () => {
+    if (cloud.room) {
+      void syncFromCloud({ silent: true, allowOverwrite: true });
+    }
+  });
+}
+
+function onJoinRoom(event) {
+  event.preventDefault();
+  enterRoom(els.roomGateInput.value, { source: "gate" });
+}
+
+function onCreateRoomFromGate() {
+  const room = slugifyRoom(els.roomGateInput.value) || createRoomCode();
+  els.roomGateInput.value = room;
+  enterRoom(room, { source: "gate", isNewRoom: true });
 }
 
 async function onCreatePlayer(event) {
@@ -417,6 +451,7 @@ function onSaveRoundEdit(event) {
 }
 
 function render() {
+  renderAppVisibility();
   renderTabs();
   renderGameTemplateOptions();
   renderPlayers();
@@ -428,6 +463,13 @@ function render() {
   renderCloudPanel();
   renderHistoryButtons();
   renderActiveGame();
+}
+
+function renderAppVisibility() {
+  const showGate = !isRoomReady || isEnteringRoom;
+  els.roomGate.hidden = !showGate;
+  els.roomGate.style.display = showGate ? "grid" : "none";
+  document.body.classList.toggle("room-gate-active", showGate);
 }
 
 function renderTabs() {
@@ -515,20 +557,46 @@ function renderCloudPanel() {
   renderCloudStatus();
 }
 
+function renderRoomGate(options = {}) {
+  const {
+    message = "Open een bestaande room of maak een nieuwe gezinsruimte om samen verder te spelen.",
+    status = "",
+    state = "idle"
+  } = options;
+
+  els.roomGateInput.value = cloud.room;
+  els.roomGateMessage.textContent = message;
+  els.roomGateStatus.textContent = status;
+  els.roomGateStatus.hidden = !status;
+  els.roomGateStatus.dataset.state = state;
+  els.roomGate.dataset.state = state;
+  els.roomGateInput.disabled = isEnteringRoom;
+  els.joinRoomBtn.disabled = isEnteringRoom;
+  els.createRoomBtn.disabled = isEnteringRoom;
+  els.joinRoomBtn.textContent = isEnteringRoom ? "Bezig..." : "Bestaande Openen";
+  els.createRoomBtn.textContent = isEnteringRoom ? "Bezig..." : "Nieuwe Room Maken";
+}
+
 function renderCloudStatus(message) {
   const hasConfig = Boolean(cloud.url && cloud.anonKey && cloud.room);
   if (message) {
+    setCloudStatusKindFromMessage(message);
     els.cloudStatus.textContent = `Cloud status: ${message}`;
+    els.cloudStatus.dataset.state = cloudStatusKind;
     return;
   }
 
   if (!hasConfig) {
+    cloudStatusKind = "idle";
     els.cloudStatus.textContent = "Cloud status: nog niet verbonden.";
+    els.cloudStatus.dataset.state = cloudStatusKind;
     return;
   }
 
+  cloudStatusKind = navigator.onLine ? "synced" : "offline";
   const lastSync = cloud.lastSyncedAt ? new Date(cloud.lastSyncedAt).toLocaleString("nl-NL") : "nog niet";
   els.cloudStatus.textContent = `Cloud status: verbonden met room '${cloud.room}' (laatste sync: ${lastSync}).`;
+  els.cloudStatus.dataset.state = cloudStatusKind;
 }
 
 function onSaveCloudConfig() {
@@ -548,16 +616,31 @@ function onSaveCloudConfig() {
 }
 
 function onRoomInput() {
-  cloud.room = slugifyRoom(els.supabaseRoom.value);
-  els.supabaseRoom.value = cloud.room;
+  const normalized = slugifyRoom(els.supabaseRoom.value);
+  cloud.room = normalized;
+  els.supabaseRoom.value = normalized;
   saveCloudConfig();
   renderCloudPanel();
+  if (!isRoomReady) {
+    els.roomGateInput.value = normalized;
+  }
+}
+
+async function onRoomCommit() {
+  if (!cloud.room) {
+    return;
+  }
+
+  await enterRoom(cloud.room, { source: "panel" });
 }
 
 function onCreateRoomCode() {
-  cloud.room = createRoomCode();
+  const room = createRoomCode();
+  els.supabaseRoom.value = room;
+  cloud.room = room;
   saveCloudConfig();
   renderCloudPanel();
+  void enterRoom(room, { source: "panel", isNewRoom: true });
 }
 
 async function onCopyShareLink() {
@@ -609,54 +692,11 @@ function renderHistoryButtons() {
 }
 
 async function onPushToCloud() {
-  if (!ensureCloudConfig()) {
-    return;
-  }
-
-  try {
-    renderCloudStatus("sync bezig (upload)...");
-    await upsertCloudState(cloudSnapshot());
-    cloud.lastSyncedAt = new Date().toISOString();
-    saveCloudConfig();
-    renderCloudStatus("upload klaar.");
-  } catch (error) {
-    console.error(error);
-    renderCloudStatus(`upload mislukt (${error.message}).`);
-  }
+  await syncToCloud();
 }
 
 async function onPullFromCloud() {
-  if (!ensureCloudConfig()) {
-    return;
-  }
-
-  try {
-    renderCloudStatus("sync bezig (download)...");
-    const remoteState = await fetchCloudState();
-    if (!remoteState) {
-      renderCloudStatus("geen cloud-data gevonden voor deze room.");
-      return;
-    }
-
-    if (!confirm("Lokale data overschrijven met cloud-data?")) {
-      renderCloudStatus("download geannuleerd.");
-      return;
-    }
-
-    state.players = Array.isArray(remoteState.players) ? remoteState.players : [];
-    state.games = Array.isArray(remoteState.games) ? remoteState.games : [];
-    state.groups = Array.isArray(remoteState.groups) ? remoteState.groups : [];
-    state.activeGameId = remoteState.activeGameId || state.games[0]?.id || null;
-    state.rankingResetAt = remoteState.rankingResetAt || null;
-    state.lastTemplateId = remoteState.lastTemplateId || "custom";
-    cloud.lastSyncedAt = new Date().toISOString();
-    saveCloudConfig();
-    saveAndRender();
-    renderCloudStatus("download klaar.");
-  } catch (error) {
-    console.error(error);
-    renderCloudStatus(`download mislukt (${error.message}).`);
-  }
+  await syncFromCloud({ allowOverwrite: true });
 }
 
 function ensureCloudConfig() {
@@ -667,6 +707,196 @@ function ensureCloudConfig() {
     return false;
   }
   return true;
+}
+
+function initializeRoomExperience() {
+  isRoomReady = false;
+  isEnteringRoom = false;
+  renderAppVisibility();
+  renderRoomGate({
+    state: "idle",
+    status: cloud.room ? `Laatst gebruikte room: '${cloud.room}'.` : ""
+  });
+}
+
+function enterRoom(roomValue, options = {}) {
+  const { source = "gate", isNewRoom = false } = options;
+  const room = slugifyRoom(roomValue);
+  if (!room) {
+    renderRoomGate({
+      message: "Vul eerst een geldige room code in.",
+      status: "Voer een korte room code in met letters en cijfers.",
+      state: "error"
+    });
+    return false;
+  }
+
+  activateRoom(room);
+  void syncRoomInBackground(room, { source, isNewRoom });
+  return true;
+}
+
+function activateRoom(room) {
+  cloud.room = room;
+  saveCloudConfig();
+  renderCloudPanel();
+  window.history.replaceState(null, "", `${window.location.pathname}?room=${encodeURIComponent(room)}`);
+  isRoomReady = true;
+  isEnteringRoom = false;
+  renderAppVisibility();
+  render();
+}
+
+async function syncRoomInBackground(room, options = {}) {
+  const { source = "gate", isNewRoom = false } = options;
+  if (!cloud.url || !cloud.anonKey) {
+    renderCloudStatus("cloudconfig ontbreekt, lokale modus actief.");
+    return false;
+  }
+
+  try {
+    renderCloudStatus(isNewRoom ? "nieuwe room wordt klaargezet..." : "room wordt geladen...");
+    const remoteRow = await fetchCloudStateByRoom(room);
+    if (cloud.room !== room) {
+      return false;
+    }
+
+    if (remoteRow?.state) {
+      applyRemoteState(remoteRow.state);
+      cloud.lastSyncedAt = remoteRow.updated_at || new Date().toISOString();
+      saveCloudConfig();
+      renderCloudStatus();
+    } else if (isNewRoom || source !== "startup" || hasMeaningfulLocalState()) {
+      await syncToCloud({ silent: true });
+      if (cloud.room === room) {
+        renderCloudStatus("nieuwe room is klaar.");
+      }
+    }
+
+    render();
+    return true;
+  } catch (error) {
+    console.error(error);
+    renderCloudStatus(`download mislukt (${error.message}).`);
+    return false;
+  }
+}
+
+async function syncToCloud(options = {}) {
+  const { silent = false } = options;
+  if (!ensureCloudConfig()) {
+    return false;
+  }
+
+  try {
+    if (!silent) {
+      renderCloudStatus("sync bezig (upload)...");
+    }
+
+    const row = await upsertCloudState(cloudSnapshot());
+    cloud.lastSyncedAt = row?.updated_at || new Date().toISOString();
+    saveCloudConfig();
+    renderCloudStatus(silent ? undefined : "upload klaar.");
+    return true;
+  } catch (error) {
+    console.error(error);
+    renderCloudStatus(`upload mislukt (${error.message}).`);
+    return false;
+  }
+}
+
+async function syncFromCloud(options = {}) {
+  const { silent = false, allowOverwrite = false } = options;
+  if (!ensureCloudConfig()) {
+    return false;
+  }
+
+  try {
+    if (!silent) {
+      renderCloudStatus("sync bezig (download)...");
+    }
+
+    const remoteRow = await fetchCloudState();
+    if (!remoteRow) {
+      if (!silent) {
+        renderCloudStatus("geen cloud-data gevonden voor deze room.");
+      }
+      return false;
+    }
+
+    if (!allowOverwrite && !confirm("Lokale data overschrijven met cloud-data?")) {
+      renderCloudStatus("download geannuleerd.");
+      return false;
+    }
+
+    applyRemoteState(remoteRow.state);
+    cloud.lastSyncedAt = remoteRow.updated_at || new Date().toISOString();
+    saveCloudConfig();
+    renderCloudStatus(silent ? undefined : "download klaar.");
+    return true;
+  } catch (error) {
+    console.error(error);
+    renderCloudStatus(`download mislukt (${error.message}).`);
+    return false;
+  }
+}
+
+function scheduleAutoPush() {
+  if (isApplyingRemoteState || !cloud.room || !navigator.onLine) {
+    return;
+  }
+
+  clearTimeout(autoPushTimer);
+  autoPushTimer = setTimeout(() => {
+    void syncToCloud({ silent: true });
+  }, 900);
+}
+
+function setCloudStatusKindFromMessage(message) {
+  const value = String(message).toLowerCase();
+  if (value.includes("mislukt")) {
+    cloudStatusKind = "error";
+    return;
+  }
+
+  if (value.includes("bezig")) {
+    cloudStatusKind = "syncing";
+    return;
+  }
+
+  if (value.includes("offline")) {
+    cloudStatusKind = "offline";
+    return;
+  }
+
+  if (
+    value.includes("klaar") ||
+    value.includes("verbinding opgeslagen") ||
+    value.includes("gekopieerd") ||
+    value.includes("verbonden")
+  ) {
+    cloudStatusKind = "synced";
+    return;
+  }
+
+  cloudStatusKind = "idle";
+}
+
+function applyRemoteState(remoteState) {
+  isApplyingRemoteState = true;
+  try {
+    state.players = Array.isArray(remoteState.players) ? remoteState.players : [];
+    state.games = Array.isArray(remoteState.games) ? remoteState.games : [];
+    state.groups = Array.isArray(remoteState.groups) ? remoteState.groups : [];
+    state.activeGameId = remoteState.activeGameId || state.games[0]?.id || null;
+    state.rankingResetAt = remoteState.rankingResetAt || null;
+    state.lastTemplateId = remoteState.lastTemplateId || "custom";
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    lastCommittedState = serializeState(state);
+    render();
+  } finally {
+    isApplyingRemoteState = false;
+  }
 }
 
 function cloudSnapshot() {
@@ -704,11 +934,18 @@ async function upsertCloudState(payloadState) {
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
+
+  const rows = await response.json();
+  return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
 }
 
 async function fetchCloudState() {
+  return fetchCloudStateByRoom(cloud.room);
+}
+
+async function fetchCloudStateByRoom(roomId) {
   const endpoint = `${cloud.url}/rest/v1/game_state?room_id=eq.${encodeURIComponent(
-    cloud.room
+    roomId
   )}&select=state,updated_at&limit=1`;
 
   const response = await fetch(endpoint, {
@@ -728,7 +965,7 @@ async function fetchCloudState() {
     return null;
   }
 
-  return rows[0].state;
+  return rows[0];
 }
 
 function sanitizeSupabaseUrl(value) {
@@ -1683,6 +1920,7 @@ function saveAndRender() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   lastCommittedState = currentSnapshot;
   render();
+  scheduleAutoPush();
 }
 
 function serializeState(snapshotState) {
@@ -1707,6 +1945,7 @@ function restoreState(serializedSnapshot) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   lastCommittedState = serializeState(state);
   render();
+  scheduleAutoPush();
 }
 
 function loadState() {
@@ -1776,15 +2015,16 @@ function loadCloudConfig() {
           : fallback.url,
       anonKey:
         typeof parsed.anonKey === "string" && parsed.anonKey.trim() ? parsed.anonKey : fallback.anonKey,
-      room:
-        typeof parsed.room === "string" && parsed.room.trim()
-          ? slugifyRoom(parsed.room)
-          : fallback.room,
+      room: urlRoom || (typeof parsed.room === "string" && parsed.room.trim() ? slugifyRoom(parsed.room) : ""),
       lastSyncedAt: parsed.lastSyncedAt || null
     };
   } catch {
     return fallback;
   }
+}
+
+function hasMeaningfulLocalState() {
+  return state.players.length > 0 || state.games.length > 0 || state.groups.length > 0;
 }
 
 function saveCloudConfig() {

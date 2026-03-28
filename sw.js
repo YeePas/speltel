@@ -1,12 +1,14 @@
-const STATIC_CACHE = "spelteller-static-v7";
-const RUNTIME_CACHE = "spelteller-runtime-v7";
+const STATIC_CACHE = "spelteller-static-v11";
+const RUNTIME_CACHE = "spelteller-runtime-v11";
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./admin.html",
   "./offline.html",
   "./config.js",
   "./styles.css",
   "./app.js",
+  "./admin.js",
   "./manifest.webmanifest",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg"
@@ -48,6 +50,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (url.origin === self.location.origin) {
+    if (shouldUseNetworkFirst(url)) {
+      event.respondWith(networkFirst(request, STATIC_CACHE));
+      return;
+    }
+
     event.respondWith(cacheFirst(request, STATIC_CACHE));
     return;
   }
@@ -86,6 +93,30 @@ async function cacheFirst(request, cacheName) {
     cache.put(request, response.clone());
   }
   return response;
+}
+
+async function networkFirst(request, cacheName) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(cacheName);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    throw new Error("Network unavailable");
+  }
+}
+
+function shouldUseNetworkFirst(url) {
+  return ["/", "/index.html", "/admin.html", "/app.js", "/admin.js", "/styles.css", "/config.js"].includes(
+    url.pathname
+  );
 }
 
 async function staleWhileRevalidate(request, cacheName) {

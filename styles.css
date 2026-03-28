@@ -160,6 +160,107 @@ body {
   min-width: 0;
 }
 
+.admin-shell {
+  padding-bottom: 3rem;
+}
+
+.admin-card {
+  width: min(100%, 28rem);
+  margin-inline: auto;
+}
+
+.admin-hero p {
+  max-width: 24rem;
+  margin-inline: auto;
+}
+
+.admin-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 0.8rem;
+}
+
+.admin-search {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.admin-room-list {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.admin-room-card h3 {
+  margin-bottom: 0.2rem;
+}
+
+.room-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(255, 248, 238, 0.32);
+  backdrop-filter: blur(10px);
+}
+
+.room-card {
+  display: grid;
+  gap: 0.9rem;
+  text-align: left;
+  width: min(100%, 28rem);
+  padding: 1.15rem;
+  box-shadow: 0 24px 50px rgba(44, 31, 15, 0.16);
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(47, 37, 51, 0.72);
+}
+
+.room-status {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(30, 29, 36, 0.08);
+  min-height: 3rem;
+}
+
+.room-status[data-state="loading"] {
+  color: #8f4d00;
+  background: rgba(255, 212, 59, 0.18);
+  border-color: rgba(255, 180, 0, 0.32);
+}
+
+.room-status[data-state="error"] {
+  color: #8f2323;
+  background: rgba(202, 47, 47, 0.12);
+  border-color: rgba(202, 47, 47, 0.28);
+}
+
+.room-status[data-state="success"] {
+  color: #156c58;
+  background: rgba(46, 196, 182, 0.14);
+  border-color: rgba(46, 196, 182, 0.28);
+}
+
+body.room-gate-active .hero,
+body.room-gate-active .app-shell,
+body.room-gate-active .app-footer {
+  filter: blur(3px);
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+}
+
 .tab-nav {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -186,6 +287,7 @@ body {
 
 .tab-panel {
   animation: reveal 0.22s ease;
+  min-width: 0;
 }
 
 @keyframes reveal {
@@ -378,6 +480,7 @@ input:focus-visible {
   display: grid;
   gap: 0.75rem;
   margin-top: 1.25rem;
+  min-width: 0;
 }
 
 .chip-list {
@@ -404,6 +507,7 @@ input:focus-visible {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.78);
+  min-width: 0;
 }
 
 .stats-card h4 {
@@ -455,6 +559,37 @@ input:focus-visible {
   gap: 0.6rem;
 }
 
+#cloudStatus {
+  padding: 0.65rem 0.8rem;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+#cloudStatus[data-state="synced"] {
+  color: #156c58;
+  background: rgba(46, 196, 182, 0.14);
+  border-color: rgba(46, 196, 182, 0.28);
+}
+
+#cloudStatus[data-state="syncing"] {
+  color: #8f4d00;
+  background: rgba(255, 212, 59, 0.18);
+  border-color: rgba(255, 180, 0, 0.32);
+}
+
+#cloudStatus[data-state="error"] {
+  color: #8f2323;
+  background: rgba(202, 47, 47, 0.12);
+  border-color: rgba(202, 47, 47, 0.28);
+}
+
+#cloudStatus[data-state="offline"] {
+  color: #2e4d68;
+  background: rgba(53, 167, 255, 0.12);
+  border-color: rgba(53, 167, 255, 0.24);
+}
+
 .choice,
 .score-input {
   display: flex;
@@ -492,11 +627,14 @@ input:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
+  min-width: 0;
 }
 
 .player-item .name {
   font-weight: 700;
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .leaderboard li {
@@ -507,6 +645,7 @@ input:focus-visible {
   display: flex;
   align-items: center;
   gap: 0.7rem;
+  min-width: 0;
 }
 
 .leaderboard li.rank-1 {
@@ -524,6 +663,8 @@ input:focus-visible {
 .leaderboard li .lb-name {
   font-weight: 800;
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .leaderboard li .lb-score {
@@ -533,7 +674,8 @@ input:focus-visible {
   font-size: 0.85rem;
   padding: 0.2rem 0.6rem;
   border-radius: 999px;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
 }
 
 .avatar {
@@ -551,6 +693,7 @@ input:focus-visible {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .inline-actions {
@@ -811,7 +954,14 @@ dialog::backdrop {
   }
 
   .tab-btn {
+    display: block;
     width: 100%;
+    padding-inline: 0.75rem;
+    font-size: 0.98rem;
+    line-height: 1.2;
+    text-align: center;
+    white-space: normal;
+    text-wrap: balance;
   }
 
   .file-input-wrapper {
@@ -840,6 +990,19 @@ dialog::backdrop {
 
   .inline-head > * {
     min-width: 0;
+  }
+
+  .player-item,
+  .leaderboard li,
+  #savedGamesList li {
+    flex-wrap: wrap;
+  }
+
+  .player-item .edit-btn,
+  .player-item .remove-btn,
+  .saved-game-actions button,
+  .leaderboard li .lb-score {
+    width: 100%;
   }
 
   #resetRankingBtn {

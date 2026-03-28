@@ -46,6 +46,27 @@
       </div>
     </header>
 
+    <section id="roomGate" class="room-gate">
+      <section class="card room-card">
+        <p class="eyebrow">Gezinsruimte</p>
+        <h2>Kies jullie room</h2>
+        <p id="roomGateMessage" class="muted">
+          Open een bestaande room of maak een nieuwe gezinsruimte om samen verder te spelen.
+        </p>
+        <form id="roomGateForm" class="stack">
+          <label>
+            Room code
+            <input id="roomGateInput" type="text" maxlength="24" placeholder="Bijv. familie-avond" />
+          </label>
+          <div class="inline-actions">
+            <button id="joinRoomBtn" type="submit">Bestaande Openen</button>
+            <button id="createRoomBtn" type="button" class="ghost-btn">Nieuwe Room Maken</button>
+          </div>
+        </form>
+        <p id="roomGateStatus" class="room-status" aria-live="polite"></p>
+      </section>
+    </section>
+
     <main class="app-shell">
       <nav class="tab-nav" aria-label="Navigatie tabs">
         <button type="button" class="tab-btn" data-tab-target="players">Spelers</button>
